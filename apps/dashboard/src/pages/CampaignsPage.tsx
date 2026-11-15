@@ -1,15 +1,20 @@
+
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { CampaignStatus, PaginatedCampaignsResponse } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
 import {
-  IconChevronLeft,
-  IconChevronRight,
+  IconArrowUpRight,
   IconDownload,
+  IconFolder,
+  IconPlus,
   IconSearch,
 } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import { CampaignStatusBadge } from '../components/StatusBadge.js';
+import { Button } from '../components/ui/Button.js';
+import { INPUT_CLASS, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
+import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -119,98 +124,100 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
-          Organize tracked emails into campaigns to view grouped analytics and follow-ups.
+        <p className="text-xs text-neutral-500">
+          Organize tracked emails into campaigns for grouped metrics and follow-ups.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={exporting}
-            onClick={() => void handleExportCsv()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-60"
-          >
+          <Button variant="secondary" disabled={exporting} onClick={() => void handleExportCsv()}>
             <IconDownload className="h-3.5 w-3.5" />
             {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreate((v) => !v)}
-            className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-blue-700"
-          >
+          </Button>
+          <Button variant="primary" onClick={() => setShowCreate((v) => !v)}>
+            {!showCreate ? <IconPlus className="h-3.5 w-3.5" /> : null}
             {showCreate ? 'Cancel' : 'New Campaign'}
-          </button>
+          </Button>
         </div>
       </div>
 
       {showCreate ? (
-        <form
-          onSubmit={(e) => void handleCreate(e)}
-          className="rounded-xl border border-blue-200 bg-white p-5 shadow-xs"
-        >
-          <h2 className="text-sm font-semibold text-slate-900">Create Campaign</h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="campaign-name" className="block text-xs font-medium text-slate-700">
-                Campaign Name
-              </label>
-              <input
-                id="campaign-name"
-                type="text"
-                required
-                maxLength={120}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Q4 Enterprise Outreach"
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
-              />
+        <SurfaceCard className="border-blue-200/80 p-5">
+          <form onSubmit={(e) => void handleCreate(e)}>
+            <h2 className="text-sm font-semibold text-neutral-900">Create Campaign</h2>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="campaign-name"
+                  className="block text-xs font-medium text-neutral-700"
+                >
+                  Campaign Name
+                </label>
+                <input
+                  id="campaign-name"
+                  type="text"
+                  required
+                  maxLength={120}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Q4 Enterprise Outreach"
+                  className={`${INPUT_CLASS} mt-1`}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="campaign-desc"
+                  className="block text-xs font-medium text-neutral-700"
+                >
+                  Description (optional)
+                </label>
+                <input
+                  id="campaign-desc"
+                  type="text"
+                  maxLength={500}
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Short note about this group"
+                  className={`${INPUT_CLASS} mt-1`}
+                />
+              </div>
             </div>
-            <div>
-              <label htmlFor="campaign-desc" className="block text-xs font-medium text-slate-700">
-                Description (optional)
-              </label>
-              <input
-                id="campaign-desc"
-                type="text"
-                maxLength={500}
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="Short note about this outreach group"
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
-              />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={creating}>
+                {creating ? 'Creating...' : 'Create Campaign'}
+              </Button>
             </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              type="submit"
-              disabled={creating}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              {creating ? 'Creating...' : 'Create Campaign'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </SurfaceCard>
       ) : null}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+      <SurfaceCard className="p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">
-            <label htmlFor="campaigns-search" className="block text-xs font-medium text-slate-600">
+            <label
+              htmlFor="campaigns-search"
+              className="block text-xs font-medium text-neutral-600"
+            >
               Search campaigns
             </label>
             <div className="relative mt-1">
-              <IconSearch className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
+              <IconSearch className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-neutral-400" />
               <input
                 id="campaigns-search"
                 type="search"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by campaign name or description..."
-                className="block w-full rounded-lg border border-slate-300 bg-white py-2 pr-3 pl-9 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                placeholder="Search by name or description..."
+                className={`${INPUT_CLASS} pl-9`}
               />
             </div>
           </div>
           <div>
-            <label htmlFor="campaigns-status" className="block text-xs font-medium text-slate-600">
+            <label
+              htmlFor="campaigns-status"
+              className="block text-xs font-medium text-neutral-600"
+            >
               Status
             </label>
             <select
@@ -220,7 +227,7 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
                 setStatus(e.target.value as CampaignStatus | '');
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${SELECT_CLASS} mt-1`}
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.label} value={opt.value}>
@@ -230,7 +237,7 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
             </select>
           </div>
         </div>
-      </section>
+      </SurfaceCard>
 
       {loading ? (
         <TableSkeleton rows={5} cols={4} />
@@ -246,17 +253,14 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
           description={
             appliedSearch || status
               ? 'No campaigns match your current filters.'
-              : 'Create your first campaign to group tracked emails and view campaign analytics.'
+              : 'Create a campaign to group tracked emails and monitor them together.'
           }
           action={
             !showCreate ? (
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-              >
+              <Button variant="primary" onClick={() => setShowCreate(true)}>
+                <IconPlus className="h-3.5 w-3.5" />
                 New Campaign
-              </button>
+              </Button>
             ) : undefined
           }
         />
@@ -266,21 +270,28 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
             {data.items.map((campaign) => (
               <article
                 key={campaign.id}
-                className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:border-slate-300"
+                className="group flex flex-col justify-between rounded-xl border border-neutral-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition duration-150 hover:border-neutral-300"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">{campaign.name}</h3>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
+                        <IconFolder className="h-3.5 w-3.5" />
+                      </span>
+                      <h3 className="truncate text-sm font-semibold text-neutral-900">
+                        {campaign.name}
+                      </h3>
+                    </div>
                     <CampaignStatusBadge status={campaign.status} />
                   </div>
-                  <p className="mt-1.5 line-clamp-2 text-xs text-slate-600">
+                  <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-neutral-500">
                     {campaign.description || 'No description'}
                   </p>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                  <div>
-                    <span className="font-semibold text-slate-900 tabular-nums">
+                <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3 text-xs text-neutral-500">
+                  <div className="tabular-nums">
+                    <span className="font-semibold text-neutral-900">
                       {campaign.emailCount ?? 0}
                     </span>{' '}
                     {campaign.emailCount === 1 ? 'email' : 'emails'} ·{' '}
@@ -289,42 +300,24 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
                   <button
                     type="button"
                     onClick={() => onSelectCampaign(campaign.id)}
-                    className="font-semibold text-blue-600 hover:text-blue-700"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-700"
                   >
                     Open
+                    <IconArrowUpRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </article>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3 text-xs text-slate-600">
-            <div>
-              Showing page <span className="font-semibold text-slate-900">{data.page}</span> of{' '}
-              <span className="font-semibold text-slate-900">{data.totalPages}</span> ({data.total}{' '}
-              total)
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={data.page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                <IconChevronLeft className="h-3.5 w-3.5" />
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={data.page >= data.totalPages}
-                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Next
-                <IconChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
+          <SurfaceCard className="overflow-hidden">
+            <PaginationBar
+              page={data.page}
+              totalPages={data.totalPages}
+              total={data.total}
+              onPageChange={setPage}
+            />
+          </SurfaceCard>
         </div>
       )}
     </div>

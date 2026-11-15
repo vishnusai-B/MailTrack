@@ -8,6 +8,7 @@ import {
 } from '../components/Charts.js';
 import { ErrorState } from '../components/ErrorState.js';
 import { ChartSkeleton } from '../components/Skeleton.js';
+import { SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
 import { ApiError, apiClient } from '../lib/api.js';
 
 const RANGE_OPTIONS = [
@@ -45,22 +46,26 @@ export function AnalyticsPage() {
     return () => controller.abort();
   }, [loadAnalytics]);
 
+  const automatedCount = data
+    ? data.classificationCounts.LIKELY_PROXY + data.classificationCounts.SUSPECTED_SCANNER
+    : 0;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-xs">
-        <div className="text-xs text-slate-500">
+    <div className="space-y-5">
+      <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+        <div className="text-xs text-neutral-500">
           Pixel activity and delivery status over your selected window.
         </div>
 
-        <div className="flex items-center gap-2">
-          <label htmlFor="analytics-range" className="text-xs font-medium text-slate-700">
+        <div className="flex items-center gap-2.5">
+          <label htmlFor="analytics-range" className="text-xs font-medium text-neutral-700">
             Date range
           </label>
           <select
             id="analytics-range"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-900 transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+            className={`${SELECT_CLASS} w-auto`}
           >
             {RANGE_OPTIONS.map((opt) => (
               <option key={opt.days} value={opt.days}>
@@ -69,10 +74,10 @@ export function AnalyticsPage() {
             ))}
           </select>
         </div>
-      </div>
+      </SurfaceCard>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <ChartSkeleton />
           <ChartSkeleton />
           <ChartSkeleton />
@@ -85,15 +90,44 @@ export function AnalyticsPage() {
           onRetry={() => loadAnalytics()}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <DailyActivityChart
-            data={data.dailyActivity}
-            title={`Recorded Pixel Requests Over Time (${days}d)`}
-          />
-          <StatusDistributionChart counts={data.statusCounts} />
-          <ClassificationDistributionChart counts={data.classificationCounts} />
-          <DailyTrendByClassificationChart data={data.dailyActivity} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
+              <div className="text-[11px] font-medium text-neutral-500">Tracked Emails</div>
+              <div className="mt-1.5 text-2xl font-semibold text-neutral-950 tabular-nums">
+                {data.statusCounts.totalEmails}
+              </div>
+            </div>
+            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
+              <div className="text-[11px] font-medium text-neutral-500">Pixel Events ({days}d)</div>
+              <div className="mt-1.5 text-2xl font-semibold text-blue-600 tabular-nums">
+                {data.classificationCounts.totalEvents}
+              </div>
+            </div>
+            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
+              <div className="text-[11px] font-medium text-neutral-500">Standard Requests</div>
+              <div className="mt-1.5 text-2xl font-semibold text-indigo-600 tabular-nums">
+                {data.classificationCounts.RECORDED}
+              </div>
+            </div>
+            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
+              <div className="text-[11px] font-medium text-neutral-500">Proxy &amp; Scanner</div>
+              <div className="mt-1.5 text-2xl font-semibold text-amber-600 tabular-nums">
+                {automatedCount}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <DailyActivityChart
+              data={data.dailyActivity}
+              title={`Recorded Pixel Requests Over Time (${days}d)`}
+            />
+            <StatusDistributionChart counts={data.statusCounts} />
+            <ClassificationDistributionChart counts={data.classificationCounts} />
+            <DailyTrendByClassificationChart data={data.dailyActivity} />
+          </div>
+        </>
       )}
     </div>
   );

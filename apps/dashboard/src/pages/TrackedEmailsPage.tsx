@@ -2,14 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PaginatedTrackedEmailsResponse, TrackingStatus } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconDownload,
-  IconSearch,
-} from '../components/Icons.js';
+import { IconArrowUpRight, IconDownload, IconSearch } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import { OpenStatusBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
+import { Button } from '../components/ui/Button.js';
+import { INPUT_CLASS, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
+import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -86,6 +84,10 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
     return () => controller.abort();
   }, [loadEmails]);
 
+  const hasActiveFilters = Boolean(
+    appliedSearch || status || fromDate || toDate || openFilter !== 'all',
+  );
+
   function clearFilters() {
     setSearchInput('');
     setAppliedSearch('');
@@ -119,30 +121,38 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
     }
   }
 
+  const filteredItems =
+    data?.items.filter((email) => {
+      const isOpened = Boolean(email.firstRecordedAt) || (email.eventCount ?? 0) > 0;
+      if (openFilter === 'opened') return isOpened;
+      if (openFilter === 'unopened') return !isOpened;
+      return true;
+    }) ?? [];
+
   return (
     <div className="space-y-5">
-      {/* Filters */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+      {/* Filter Toolbar */}
+      <SurfaceCard className="p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-2">
-            <label htmlFor="emails-search" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="emails-search" className="block text-xs font-medium text-neutral-600">
               Search recipient or subject
             </label>
             <div className="relative mt-1">
-              <IconSearch className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
+              <IconSearch className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-neutral-400" />
               <input
                 id="emails-search"
                 type="search"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by recipient or subject..."
-                className="block w-full rounded-lg border border-slate-300 bg-white py-2 pr-3 pl-9 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                placeholder="Search recipient or subject..."
+                className={`${INPUT_CLASS} pl-9`}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="emails-status" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="emails-status" className="block text-xs font-medium text-neutral-600">
               Status
             </label>
             <select
@@ -152,7 +162,7 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                 setStatus(e.target.value as TrackingStatus | '');
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${SELECT_CLASS} mt-1`}
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.label} value={opt.value}>
@@ -163,7 +173,7 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
           </div>
 
           <div>
-            <label htmlFor="emails-from" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="emails-from" className="block text-xs font-medium text-neutral-600">
               Created from
             </label>
             <input
@@ -174,12 +184,12 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                 setFromDate(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${INPUT_CLASS} mt-1 text-xs`}
             />
           </div>
 
           <div>
-            <label htmlFor="emails-to" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="emails-to" className="block text-xs font-medium text-neutral-600">
               Created to
             </label>
             <input
@@ -190,45 +200,49 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                 setToDate(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${INPUT_CLASS} mt-1 text-xs`}
             />
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
-            {(
-              [
-                { id: 'all', label: 'All' },
-                { id: 'opened', label: 'Opened' },
-                { id: 'unopened', label: 'Not opened' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setOpenFilter(opt.id)}
-                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                  openFilter === opt.id
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center rounded-lg border border-neutral-200 bg-neutral-50/80 p-0.5 text-xs">
+              {(
+                [
+                  { id: 'all', label: 'All' },
+                  { id: 'opened', label: 'Opened' },
+                  { id: 'unopened', label: 'Not opened' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setOpenFilter(opt.id)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    openFilter === opt.id
+                      ? 'bg-white text-neutral-950 shadow-2xs ring-1 ring-neutral-200/70'
+                      : 'text-neutral-600 hover:text-neutral-950'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {hasActiveFilters ? (
+              <Button variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
           </div>
 
-          <button
-            type="button"
-            onClick={() => void handleExportCsv()}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={() => void handleExportCsv()} disabled={exporting}>
             <IconDownload className="h-3.5 w-3.5" />
             {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
+          </Button>
         </div>
-      </section>
+      </SurfaceCard>
 
       {loading ? (
         <TableSkeleton rows={6} cols={6} />
@@ -240,71 +254,80 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
         />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
-          title="No tracked emails found"
+          title="No tracked emails yet"
           description={
-            appliedSearch || status || fromDate || toDate
+            hasActiveFilters
               ? 'No tracked emails match your current search or filter criteria.'
-              : 'Tracked emails registered by the MailTrack extension will appear here.'
+              : 'Send a tracked email from Gmail using the Chrome extension to see it listed here.'
           }
           action={
-            appliedSearch || status || fromDate || toDate ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-              >
+            hasActiveFilters ? (
+              <Button variant="primary" onClick={clearFilters}>
                 Clear filters
-              </button>
+              </Button>
             ) : undefined
           }
         />
       ) : (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
-                <tr>
-                  <th scope="col" className="px-5 py-3.5">
-                    Recipient
-                  </th>
-                  <th scope="col" className="px-5 py-3.5">
-                    Subject
-                  </th>
-                  <th scope="col" className="px-5 py-3.5">
-                    Open Status
-                  </th>
-                  <th scope="col" className="px-5 py-3.5">
-                    Tracking Status
-                  </th>
-                  <th scope="col" className="px-5 py-3.5">
-                    Created Date
-                  </th>
-                  <th scope="col" className="px-5 py-3.5">
-                    Last Recorded Activity
-                  </th>
-                  <th scope="col" className="px-5 py-3.5 text-right">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {data.items
-                  .filter((email) => {
-                    const isOpened = Boolean(email.firstRecordedAt) || (email.eventCount ?? 0) > 0;
-                    if (openFilter === 'opened') return isOpened;
-                    if (openFilter === 'unopened') return !isOpened;
-                    return true;
-                  })
-                  .map((email) => {
+        <SurfaceCard className="overflow-hidden">
+          {filteredItems.length === 0 ? (
+            <div className="p-8 text-center text-xs text-neutral-500">
+              No emails on this page match the selected activity filter.{' '}
+              <button
+                type="button"
+                onClick={() => setOpenFilter('all')}
+                className="font-medium text-blue-600 hover:underline"
+              >
+                Show all
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-neutral-200/80 text-left text-sm">
+                <thead className="bg-neutral-50/80 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
+                  <tr>
+                    <th scope="col" className="px-5 py-3">
+                      Recipient
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Subject
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Activity
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Status
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Created
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Last Activity
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 bg-white">
+                  {filteredItems.map((email) => {
                     const lastActivity = email.lastRecordedAt ?? email.firstRecordedAt;
+                    const initial = (email.recipientReference[0] ?? '?').toUpperCase();
                     return (
-                      <tr key={email.id} className="transition hover:bg-slate-50/80">
-                        <td className="max-w-[220px] truncate px-5 py-3.5 font-medium text-slate-900">
-                          {email.recipientReference}
+                      <tr key={email.id} className="group transition-colors hover:bg-neutral-50/80">
+                        <td className="max-w-[230px] px-5 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[11px] font-semibold text-neutral-700">
+                              {initial}
+                            </span>
+                            <span className="truncate text-xs font-medium text-neutral-900">
+                              {email.recipientReference}
+                            </span>
+                          </div>
                         </td>
-                        <td className="max-w-[260px] truncate px-5 py-3.5 text-slate-600">
+                        <td className="max-w-[260px] truncate px-5 py-3.5 text-xs text-neutral-700">
                           {email.subject || (
-                            <span className="text-slate-400 italic">No subject</span>
+                            <span className="text-neutral-400 italic">No subject</span>
                           )}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
@@ -316,57 +339,33 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <TrackingStatusBadge status={email.status} />
                         </td>
-                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
+                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-neutral-500 tabular-nums">
                           {formatDateTime(email.createdAt)}
                         </td>
-                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
+                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-neutral-500 tabular-nums">
                           {lastActivity ? formatDateTime(lastActivity) : '—'}
                         </td>
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => onSelectEmail(email.id)}
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                          >
+                          <Button variant="secondary" onClick={() => onSelectEmail(email.id)}>
                             View details
-                          </button>
+                            <IconArrowUpRight className="h-3 w-3 text-neutral-400" />
+                          </Button>
                         </td>
                       </tr>
                     );
                   })}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {/* Server-side Pagination */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-5 py-3 text-xs text-slate-600">
-            <div>
-              Showing page <span className="font-semibold text-slate-900">{data.page}</span> of{' '}
-              <span className="font-semibold text-slate-900">{data.totalPages}</span> ({data.total}{' '}
-              total)
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={data.page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <IconChevronLeft className="h-3.5 w-3.5" />
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={data.page >= data.totalPages}
-                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-                <IconChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </section>
+          <PaginationBar
+            page={data.page}
+            totalPages={data.totalPages}
+            total={data.total}
+            onPageChange={setPage}
+          />
+        </SurfaceCard>
       )}
     </div>
   );

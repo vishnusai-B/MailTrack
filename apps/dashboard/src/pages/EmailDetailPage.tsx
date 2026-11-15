@@ -2,13 +2,15 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import type { Campaign, TrackedEmailDetail } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
-import { IconArrowLeft } from '../components/Icons.js';
+import { IconArrowLeft, IconCalendar, IconClock, IconFolder } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import {
   ClassificationBadge,
   OpenStatusBadge,
   TrackingStatusBadge,
 } from '../components/StatusBadge.js';
+import { Button } from '../components/ui/Button.js';
+import { INPUT_CLASS, SectionHeader, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -51,7 +53,7 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
       .listCampaigns({ limit: 50 }, controller.signal)
       .then((res) => setCampaigns(res.items))
       .catch(() => {
-        // Non-blocking: campaign selector will only show current assignment if list fails
+        // Non-blocking: campaign selector keeps current assignment if list fails
       });
     return () => controller.abort();
   }, [loadDetail]);
@@ -108,16 +110,12 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50"
-        >
+        <Button variant="secondary" onClick={onBack}>
           <IconArrowLeft className="h-3.5 w-3.5" />
           Back to Tracked Emails
-        </button>
+        </Button>
       </div>
 
       {loading ? (
@@ -130,14 +128,15 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
         />
       ) : (
         <>
-          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+          <SurfaceCard className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
                   {detail.subject || '(No subject)'}
                 </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Recipient: <span className="font-medium">{detail.recipientReference}</span>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Recipient:{' '}
+                  <span className="font-medium text-neutral-900">{detail.recipientReference}</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -149,49 +148,74 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
               </div>
             </div>
 
-            <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-100 pt-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <dt className="text-xs font-medium text-slate-500">Created At</dt>
-                <dd className="mt-1 text-slate-900">{formatDateTime(detail.createdAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-slate-500">
-                  Sent At (Trusted Confirmation)
+            <dl className="mt-6 grid grid-cols-1 gap-3 border-t border-neutral-100 pt-5 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  label: 'Created At',
+                  value: formatDateTime(detail.createdAt),
+                  icon: IconCalendar,
+                },
+                {
+                  label: 'Sent At (Trusted Confirmation)',
+                  value: formatDateTime(detail.sentAt),
+                  icon: IconClock,
+                },
+                {
+                  label: 'Expiration Timestamp',
+                  value: formatDateTime(detail.expiresAt),
+                  icon: IconClock,
+                },
+                {
+                  label: 'First Recorded Event',
+                  value: formatDateTime(detail.firstRecordedAt),
+                  icon: IconClock,
+                },
+                {
+                  label: 'Latest Recorded Event',
+                  value:
+                    detail.events.length > 0
+                      ? formatDateTime(detail.events[detail.events.length - 1]!.occurredAt)
+                      : '—',
+                  icon: IconClock,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-lg border border-neutral-100 bg-neutral-50/70 px-3.5 py-2.5"
+                  >
+                    <dt className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+                      <Icon className="h-3 w-3 text-neutral-400" />
+                      {item.label}
+                    </dt>
+                    <dd className="mt-1 text-xs font-medium text-neutral-900 tabular-nums">
+                      {item.value}
+                    </dd>
+                  </div>
+                );
+              })}
+              <div className="rounded-lg border border-neutral-100 bg-neutral-50/70 px-3.5 py-2.5">
+                <dt className="text-[11px] font-medium text-neutral-500">
+                  Total Recorded Pixel Events
                 </dt>
-                <dd className="mt-1 text-slate-900">{formatDateTime(detail.sentAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-slate-500">Expiration Timestamp</dt>
-                <dd className="mt-1 text-slate-900">{formatDateTime(detail.expiresAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-slate-500">First Recorded Event</dt>
-                <dd className="mt-1 text-slate-900">{formatDateTime(detail.firstRecordedAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-slate-500">Latest Recorded Event</dt>
-                <dd className="mt-1 text-slate-900">
-                  {detail.events.length > 0
-                    ? formatDateTime(detail.events[detail.events.length - 1]!.occurredAt)
-                    : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-slate-500">Total Recorded Pixel Events</dt>
-                <dd className="mt-1 font-semibold text-slate-900 tabular-nums">
+                <dd className="mt-1 text-sm font-semibold text-neutral-950 tabular-nums">
                   {detail.events.length}
                 </dd>
               </div>
             </dl>
-          </section>
+          </SurfaceCard>
 
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-              <h3 className="text-sm font-semibold text-slate-900">Campaign</h3>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Assign this email to a campaign to group analytics and CSV exports.
+          <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <SurfaceCard className="p-5">
+              <div className="flex items-center gap-2">
+                <IconFolder className="h-4 w-4 text-neutral-400" />
+                <h3 className="text-sm font-semibold text-neutral-900">Campaign</h3>
+              </div>
+              <p className="mt-1 text-xs text-neutral-500">
+                Group this email under a campaign for combined metrics and exports.
               </p>
-              <div className="mt-3">
+              <div className="mt-3.5">
                 <label htmlFor="email-campaign-select" className="sr-only">
                   Campaign
                 </label>
@@ -200,7 +224,7 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
                   value={detail.campaignId ?? ''}
                   disabled={assigningCampaign}
                   onChange={(e) => void handleAssignCampaign(e.target.value)}
-                  className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none disabled:opacity-50"
+                  className={SELECT_CLASS}
                 >
                   <option value="">No campaign</option>
                   {campaigns.map((c) => (
@@ -215,81 +239,78 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
                   ) : null}
                 </select>
               </div>
-            </div>
+            </SurfaceCard>
 
-            <form
-              onSubmit={(e) => void handleCreateReminder(e)}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs"
-            >
-              <h3 className="text-sm font-semibold text-slate-900">Follow-up Reminder</h3>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Schedule a reminder if you do not hear back.
-              </p>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="reminder-due-at"
-                    className="block text-xs font-medium text-slate-600"
-                  >
-                    Due date &amp; time
-                  </label>
-                  <input
-                    id="reminder-due-at"
-                    type="datetime-local"
-                    required
-                    value={dueAt}
-                    onChange={(e) => setDueAt(e.target.value)}
-                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
-                  />
+            <SurfaceCard className="p-5">
+              <form onSubmit={(e) => void handleCreateReminder(e)}>
+                <div className="flex items-center gap-2">
+                  <IconClock className="h-4 w-4 text-neutral-400" />
+                  <h3 className="text-sm font-semibold text-neutral-900">Follow-up Reminder</h3>
                 </div>
-                <div>
-                  <label
-                    htmlFor="reminder-note"
-                    className="block text-xs font-medium text-slate-600"
-                  >
-                    Note (optional)
-                  </label>
-                  <input
-                    id="reminder-note"
-                    type="text"
-                    maxLength={300}
-                    placeholder="e.g. Send second touchpoint"
-                    value={reminderNote}
-                    onChange={(e) => setReminderNote(e.target.value)}
-                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
-                  />
+                <p className="mt-1 text-xs text-neutral-500">
+                  Set a due date to follow up on this thread.
+                </p>
+                <div className="mt-3.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="reminder-due-at"
+                      className="block text-xs font-medium text-neutral-600"
+                    >
+                      Due date &amp; time
+                    </label>
+                    <input
+                      id="reminder-due-at"
+                      type="datetime-local"
+                      required
+                      value={dueAt}
+                      onChange={(e) => setDueAt(e.target.value)}
+                      className={`${INPUT_CLASS} mt-1 text-xs`}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="reminder-note"
+                      className="block text-xs font-medium text-neutral-600"
+                    >
+                      Note (optional)
+                    </label>
+                    <input
+                      id="reminder-note"
+                      type="text"
+                      maxLength={300}
+                      placeholder="Send second touchpoint"
+                      value={reminderNote}
+                      onChange={(e) => setReminderNote(e.target.value)}
+                      className={`${INPUT_CLASS} mt-1 text-xs`}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={creatingReminder || !dueAt}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {creatingReminder ? 'Scheduling...' : 'Schedule Reminder'}
-                </button>
-              </div>
-            </form>
+                <div className="mt-3.5 flex justify-end">
+                  <Button type="submit" variant="primary" disabled={creatingReminder || !dueAt}>
+                    {creatingReminder ? 'Scheduling...' : 'Schedule Reminder'}
+                  </Button>
+                </div>
+              </form>
+            </SurfaceCard>
           </section>
 
           <div
             role="note"
-            className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-950"
+            className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 px-4 py-3 text-xs text-indigo-950"
           >
-            <strong>Classification Disclaimer:</strong> Event classifications (<code>RECORDED</code>
-            , <code>LIKELY_PROXY</code>, <code>SUSPECTED_SCANNER</code>) describe HTTP request
-            characteristics only and{' '}
+            <strong>Classification note:</strong> Classifications (
+            <code className="font-mono">RECORDED</code>,{' '}
+            <code className="font-mono">LIKELY_PROXY</code>,{' '}
+            <code className="font-mono">SUSPECTED_SCANNER</code>) reflect request metadata only and{' '}
             <strong>do not establish whether a human read the email</strong>. Raw tracking tokens
-            and raw IP addresses are never exposed.
+            and IP addresses are never exposed.
           </div>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
-            <div className="border-b border-slate-200 px-6 py-4">
-              <h3 className="text-sm font-semibold text-slate-900">Event History</h3>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Chronological pixel request events recorded for this email.
-              </p>
-            </div>
+          <SurfaceCard className="overflow-hidden">
+            <SectionHeader
+              title="Event History"
+              description="Chronological pixel requests logged for this email."
+            />
 
             {detail.events.length === 0 ? (
               <div className="p-6">
@@ -300,30 +321,30 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                <table className="min-w-full divide-y divide-neutral-200/80 text-left text-sm">
+                  <thead className="bg-neutral-50/80 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
                     <tr>
-                      <th scope="col" className="px-6 py-3">
+                      <th scope="col" className="px-5 py-3">
                         Occurred At
                       </th>
-                      <th scope="col" className="px-6 py-3">
+                      <th scope="col" className="px-5 py-3">
                         Event Type
                       </th>
-                      <th scope="col" className="px-6 py-3">
+                      <th scope="col" className="px-5 py-3">
                         Classification
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
+                  <tbody className="divide-y divide-neutral-100 bg-white">
                     {detail.events.map((ev) => (
-                      <tr key={ev.id}>
-                        <td className="px-6 py-3.5 text-xs whitespace-nowrap text-slate-700">
+                      <tr key={ev.id} className="transition-colors hover:bg-neutral-50/70">
+                        <td className="px-5 py-3 text-xs whitespace-nowrap text-neutral-700 tabular-nums">
                           {formatDateTime(ev.occurredAt)}
                         </td>
-                        <td className="px-6 py-3.5 font-mono text-xs text-slate-600">
+                        <td className="px-5 py-3 font-mono text-xs text-neutral-600">
                           {ev.eventType}
                         </td>
-                        <td className="px-6 py-3.5 whitespace-nowrap">
+                        <td className="px-5 py-3 whitespace-nowrap">
                           <ClassificationBadge classification={ev.classification} />
                         </td>
                       </tr>
@@ -332,7 +353,7 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
                 </table>
               </div>
             )}
-          </section>
+          </SurfaceCard>
         </>
       )}
     </div>

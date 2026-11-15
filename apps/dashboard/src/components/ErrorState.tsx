@@ -10,18 +10,20 @@ export function ErrorState({ title = 'Unable to load data', message, onRetry }: 
   return (
     <div
       role="alert"
-      className="rounded-2xl border border-rose-200/90 bg-rose-50/70 p-6 text-rose-900"
+      className="rounded-xl border border-rose-200/90 bg-rose-50/60 p-5 text-rose-900"
     >
       <div className="flex items-start gap-3">
-        <IconAlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
+          <IconAlertCircle className="h-4 w-4" />
+        </div>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="mt-1 text-sm text-rose-800">{message}</p>
+          <h3 className="text-sm font-semibold text-rose-950">{title}</h3>
+          <p className="mt-0.5 text-xs leading-relaxed text-rose-800">{message}</p>
           {onRetry ? (
             <button
               type="button"
               onClick={onRetry}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-rose-800 shadow-xs ring-1 ring-rose-300 transition hover:bg-rose-50"
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 text-xs font-medium text-rose-800 shadow-2xs transition hover:bg-rose-50"
             >
               <IconRefresh className="h-3.5 w-3.5" />
               Retry

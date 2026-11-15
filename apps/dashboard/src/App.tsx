@@ -24,6 +24,16 @@ const SECTION_TITLES: Record<NavSection, string> = {
   settings: 'Settings',
 };
 
+const SECTION_SUBTITLES: Record<NavSection, string> = {
+  overview: 'Workspace summary',
+  emails: 'Sent & tracked threads',
+  campaigns: 'Grouped outreach',
+  reminders: 'Follow-up schedule',
+  activity: 'Pixel request log',
+  analytics: 'Trends & classifications',
+  settings: 'Account & system health',
+};
+
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
@@ -151,11 +161,18 @@ export function App() {
       ? 'Campaign Details'
       : SECTION_TITLES[activeSection];
 
+  const pageSubtitle = selectedEmailId
+    ? 'Metadata & event history'
+    : selectedCampaignId
+      ? 'Campaign breakdown'
+      : SECTION_SUBTITLES[activeSection];
+
   return (
     <>
       <Layout
         activeSection={activeSection}
         pageTitle={pageTitle}
+        pageSubtitle={pageSubtitle}
         user={user}
         health={health}
         onNavigate={handleNavigate}
@@ -191,7 +208,7 @@ export function App() {
         ) : activeSection === 'analytics' ? (
           <AnalyticsPage />
         ) : (
-          <SettingsPage user={user} health={health} />
+          <SettingsPage user={user} health={health} onLogout={handleLogout} />
         )}
       </Layout>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { EventClassification, PaginatedTrackingEventsResponse } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
-import { IconChevronLeft, IconChevronRight, IconDownload } from '../components/Icons.js';
+import { IconDownload } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import { ClassificationBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
+import { Button } from '../components/ui/Button.js';
+import { INPUT_CLASS, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
+import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -67,6 +70,8 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
     return () => controller.abort();
   }, [loadEvents]);
 
+  const hasFilters = Boolean(classification || fromDate || toDate);
+
   function clearFilters() {
     setClassification('');
     setFromDate('');
@@ -100,18 +105,19 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
     <div className="space-y-5">
       <div
         role="note"
-        className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-xs text-slate-500 shadow-xs"
+        className="rounded-xl border border-neutral-200/80 bg-white px-4 py-2.5 text-xs text-neutral-600 shadow-2xs"
       >
-        Each row logs a pixel request. Repeated requests are listed individually and are{' '}
-        <strong className="font-medium text-slate-700">not</strong> counted as unique human opens.
+        Each row logs an individual pixel request. Repeated requests are listed separately and are{' '}
+        <strong className="font-semibold text-neutral-900">not</strong> counted as unique human
+        opens.
       </div>
 
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      <SurfaceCard className="p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label
               htmlFor="activity-classification"
-              className="block text-xs font-medium text-slate-600"
+              className="block text-xs font-medium text-neutral-600"
             >
               Classification
             </label>
@@ -122,7 +128,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
                 setClassification(e.target.value as EventClassification | '');
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${SELECT_CLASS} mt-1`}
             >
               {CLASSIFICATION_OPTIONS.map((opt) => (
                 <option key={opt.label} value={opt.value}>
@@ -133,7 +139,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
           </div>
 
           <div>
-            <label htmlFor="activity-from" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="activity-from" className="block text-xs font-medium text-neutral-600">
               From date
             </label>
             <input
@@ -144,12 +150,12 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
                 setFromDate(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${INPUT_CLASS} mt-1 text-xs`}
             />
           </div>
 
           <div>
-            <label htmlFor="activity-to" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="activity-to" className="block text-xs font-medium text-neutral-600">
               To date
             </label>
             <input
@@ -160,22 +166,25 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
                 setToDate(e.target.value);
                 setPage(1);
               }}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              className={`${INPUT_CLASS} mt-1 text-xs`}
             />
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-          <button
-            type="button"
-            onClick={() => void handleExportCsv()}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50"
-          >
+
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3">
+          <div>
+            {hasFilters ? (
+              <Button variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+          <Button variant="secondary" onClick={() => void handleExportCsv()} disabled={exporting}>
             <IconDownload className="h-3.5 w-3.5" />
             {exporting ? 'Exporting...' : 'Export CSV'}
-          </button>
+          </Button>
         </div>
-      </section>
+      </SurfaceCard>
 
       {loading ? (
         <TableSkeleton rows={6} cols={5} />
@@ -185,60 +194,56 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
         <EmptyState
           title="No tracking events found"
           description={
-            classification || fromDate || toDate
+            hasFilters
               ? 'No events match your current classification or date filters.'
-              : 'Recorded pixel requests will appear here as emails are tracked.'
+              : 'Pixel requests will appear here as tracked emails receive traffic.'
           }
           action={
-            classification || fromDate || toDate ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-              >
+            hasFilters ? (
+              <Button variant="primary" onClick={clearFilters}>
                 Clear filters
-              </button>
+              </Button>
             ) : undefined
           }
         />
       ) : (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+        <SurfaceCard className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+            <table className="min-w-full divide-y divide-neutral-200/80 text-left text-sm">
+              <thead className="bg-neutral-50/80 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
                 <tr>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-5 py-3">
                     Timestamp
                   </th>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-5 py-3">
                     Associated Email
                   </th>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-5 py-3">
                     Email Status
                   </th>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-5 py-3">
                     Classification
                   </th>
-                  <th scope="col" className="px-5 py-3.5">
+                  <th scope="col" className="px-5 py-3">
                     Metadata
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-neutral-100 bg-white">
                 {data.items.map((ev) => (
-                  <tr key={ev.id} className="transition hover:bg-slate-50/80">
-                    <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-600">
+                  <tr key={ev.id} className="transition-colors hover:bg-neutral-50/80">
+                    <td className="px-5 py-3.5 text-xs whitespace-nowrap text-neutral-600 tabular-nums">
                       {formatDateTime(ev.occurredAt)}
                     </td>
                     <td className="max-w-[260px] px-5 py-3.5">
                       <button
                         type="button"
                         onClick={() => onSelectEmail(ev.trackedEmail.id)}
-                        className="block truncate text-left font-medium text-slate-900 hover:text-blue-600"
+                        className="block truncate text-left text-xs font-medium text-neutral-900 transition hover:text-blue-600"
                       >
                         {ev.trackedEmail.subject || '(No subject)'}
                       </button>
-                      <div className="truncate text-xs text-slate-500">
+                      <div className="truncate text-[11px] text-neutral-500">
                         {ev.trackedEmail.recipientReference}
                       </div>
                     </td>
@@ -248,7 +253,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <ClassificationBadge classification={ev.classification} />
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-xs whitespace-nowrap text-slate-500">
+                    <td className="px-5 py-3.5 font-mono text-xs whitespace-nowrap text-neutral-500">
                       {ev.eventType}
                     </td>
                   </tr>
@@ -257,34 +262,14 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-5 py-3 text-xs text-slate-600">
-            <div>
-              Showing page <span className="font-semibold text-slate-900">{data.page}</span> of{' '}
-              <span className="font-semibold text-slate-900">{data.totalPages}</span> ({data.total}{' '}
-              total events)
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={data.page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <IconChevronLeft className="h-3.5 w-3.5" />
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={data.page >= data.totalPages}
-                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Next
-                <IconChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </section>
+          <PaginationBar
+            page={data.page}
+            totalPages={data.totalPages}
+            total={data.total}
+            unitLabel="total events"
+            onPageChange={setPage}
+          />
+        </SurfaceCard>
       )}
     </div>
   );
