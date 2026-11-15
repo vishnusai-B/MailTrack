@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+.DS_Store
+apps/extension/dist/
+coverage/
+*.tsbuildinfo

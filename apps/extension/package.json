@@ -1,0 +1,27 @@
+{
+  "name": "@mailtrack/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:prod": "node build.mjs --prod",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mailtrack/shared": "*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.299",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  }
+}

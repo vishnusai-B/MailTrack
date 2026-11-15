@@ -1,0 +1,31 @@
+{
+  "name": "mailtrack",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev:server": "npm run dev --workspace=@mailtrack/server",
+    "dev:dashboard": "npm run dev --workspace=@mailtrack/dashboard",
+    "dev:extension": "npm run dev --workspace=@mailtrack/extension",
+    "prisma:generate": "npm run prisma:generate --workspace=@mailtrack/server",
+    "prisma:migrate": "npm run prisma:migrate --workspace=@mailtrack/server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "eslint": "^9.22.0",
+    "eslint-config-prettier": "^10.1.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.26.1"
+  }
+}
