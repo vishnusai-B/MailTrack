@@ -157,6 +157,18 @@ describe('Tracking Lifecycle, Strict SENT Confirmation, Expiration & Security', 
       .send({ recipientReference: '' });
     expect(badRegister.status).toBe(400);
 
+    const placeholderRegister = await request(app)
+      .post('/api/tracking/register')
+      .set('Authorization', auth)
+      .send({ recipientReference: 'enter another email address that you can access.' });
+    expect(placeholderRegister.status).toBe(400);
+
+    const invalidEmailRegister = await request(app)
+      .post('/api/tracking/register')
+      .set('Authorization', auth)
+      .send({ recipientReference: 'not-an-email' });
+    expect(invalidEmailRegister.status).toBe(400);
+
     const badStatus = await request(app)
       .patch('/api/tracking/emails/trk-1/status')
       .set('Authorization', auth)

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComposeManager, type RegisterTrackingFn } from '../src/content/composeManager.js';
 import { ComposeStateManager } from '../src/content/composeState.js';
-import { TOGGLE_HOST_ATTR } from '../src/content/gmailSelectors.js';
+import { TOGGLE_HOST_ATTR, findRecipientReference } from '../src/content/gmailSelectors.js';
 import { insertTrackingPixel, PIXEL_ATTR } from '../src/content/pixelInjector.js';
 
 function createMockComposeDialog(options: {
@@ -223,6 +223,74 @@ describe('ComposeManager & Send-Time Tracking', () => {
       .querySelector(`[${TOGGLE_HOST_ATTR}="1"]`)!
       .shadowRoot!.querySelector('button')!;
     expect(toggleBtn.textContent).toContain('Error');
+
+    manager.destroy();
+  });
+
+  it('extracts validated recipients from PeopleKit/chip DOM and ignores body quotes, placeholders, and invalid inputs', () => {
+    const { container, bodyEditor } = createMockComposeDialog({ role: 'dialog' });
+
+    // Quoted email inside body editor must be ignored
+    const quoted = document.createElement('span');
+    quoted.setAttribute('email', 'quoted-sender@example.com');
+    bodyEditor.appendChild(quoted);
+
+    // PeopleKit chips + duplicate casing
+    const chip1 = document.createElement('div');
+    chip1.setAttribute('data-hovercard-id', 'alice@example.com');
+    const chip2 = document.createElement('span');
+    chip2.setAttribute('email', 'bob@example.com');
+    const chipDup = document.createElement('div');
+    chipDup.setAttribute('data-hovercard-id', 'ALICE@example.com');
+    container.prepend(chip1, chip2, chipDup);
+
+    expect(findRecipientReference(container)).toBe('alice@example.com, bob@example.com');
+
+    // Placeholder / instructional text in PeopleKit input must be rejected
+    chip1.remove();
+    chip2.remove();
+    chipDup.remove();
+
+    const peoplekitInput = document.createElement('input');
+    peoplekitInput.setAttribute('peoplekit-id', 'to');
+    peoplekitInput.value = 'enter another email address that you can access.';
+    container.prepend(peoplekitInput);
+    expect(findRecipientReference(container)).toBeNull();
+
+    // Invalid email string must be rejected
+    peoplekitInput.value = 'not-an-email';
+    expect(findRecipientReference(container)).toBeNull();
+
+    // Valid typed recipient (including "Name <email>" format) is extracted cleanly
+    peoplekitInput.value = 'Carol <carol@example.com>';
+    expect(findRecipientReference(container)).toBe('carol@example.com');
+  });
+
+  it('blocks send and skips registration when recipient field is empty or contains placeholder text', async () => {
+    const registerFn = vi.fn<RegisterTrackingFn>();
+    const state = new ComposeStateManager(true);
+    const manager = new ComposeManager(state, document.body, registerFn);
+
+    const { container, sendBtn } = createMockComposeDialog({
+      role: 'dialog',
+      subject: 'Missing Recipient',
+    });
+    const toInput = document.createElement('input');
+    toInput.setAttribute('aria-label', 'To');
+    toInput.value = 'enter another email address that you can access.';
+    container.prepend(toInput);
+
+    document.body.appendChild(container);
+    manager.start();
+
+    const nativeSend = vi.fn();
+    sendBtn!.addEventListener('click', nativeSend);
+    sendBtn!.click();
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(registerFn).not.toHaveBeenCalled();
+    expect(nativeSend).not.toHaveBeenCalled();
 
     manager.destroy();
   });

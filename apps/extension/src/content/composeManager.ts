@@ -241,6 +241,9 @@ export class ComposeManager {
 
       if (!tracking) {
         const recipientReference = findRecipientReference(container);
+        if (!recipientReference) {
+          throw new Error('Enter at least one valid recipient email address');
+        }
         const subject = findSubjectValue(container);
         const response = await this.registerTracking({ recipientReference, subject });
 

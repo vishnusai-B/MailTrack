@@ -201,7 +201,18 @@ export async function handleExtensionMessage(
 
       case 'REGISTER_TRACKING': {
         if (typeof message.recipientReference !== 'string' || !message.recipientReference.trim()) {
-          return { ok: false, error: 'Recipient reference is required' };
+          return { ok: false, error: 'Recipient email address is required' };
+        }
+        const recipientParts = message.recipientReference
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean);
+        const emailPattern = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
+        if (
+          recipientParts.length === 0 ||
+          recipientParts.some((part) => !emailPattern.test(part))
+        ) {
+          return { ok: false, error: 'Invalid recipient email address' };
         }
         const state = await getStoredState();
         if (!state.accessToken) {

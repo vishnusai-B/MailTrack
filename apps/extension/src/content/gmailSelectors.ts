@@ -56,27 +56,110 @@ export function findSubjectValue(container: HTMLElement): string | undefined {
   return value ? value.slice(0, 255) : undefined;
 }
 
+const EMAIL_ADDRESS_REGEX = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
+
 /**
- * Reads only the recipient reference metadata from the compose container.
+ * Parses one or more email addresses from a Gmail chip attribute or typed recipient input.
+ * Rejects instructional/placeholder text and malformed addresses.
  */
-export function findRecipientReference(container: HTMLElement): string {
-  const chips = Array.from(container.querySelectorAll<HTMLElement>('[email]'))
-    .map((el) => el.getAttribute('email')?.trim())
-    .filter((v): v is string => Boolean(v && v.includes('@')));
+export function extractValidRecipientEmails(raw: string): string[] {
+  const results: string[] = [];
+  const seen = new Set<string>();
 
-  if (chips.length > 0) {
-    return Array.from(new Set(chips)).join(', ').slice(0, 320);
+  for (const part of raw.split(/[,;]+/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    // Support "Display Name <user@example.com>" format as well as bare "user@example.com"
+    const angleMatch = trimmed.match(/<([^<>]+)>/);
+    const candidate = (angleMatch?.[1] ?? trimmed).trim();
+
+    if (EMAIL_ADDRESS_REGEX.test(candidate)) {
+      const normalized = candidate.toLowerCase();
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        results.push(candidate);
+      }
+    }
   }
 
-  const toInput = container.querySelector<HTMLInputElement>(
-    'input[aria-label*="To"], input[peoplekit-id], textarea[name="to"]',
-  );
-  const raw = toInput?.value?.trim();
-  if (raw) {
-    return raw.slice(0, 320);
+  return results;
+}
+
+/**
+ * Reads only validated recipient email addresses from Gmail compose recipient fields.
+ * Excludes the message body editor (so quoted reply/forward headers are ignored) and
+ * rejects placeholder or instructional UI text. Returns null if no valid recipient exists.
+ */
+export function findRecipientReference(container: HTMLElement): string | null {
+  const emails: string[] = [];
+  const seen = new Set<string>();
+
+  const addEmails = (candidates: string[]) => {
+    for (const email of candidates) {
+      const key = email.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        emails.push(email);
+      }
+    }
+  };
+
+  // 1. Read Gmail recipient chips ([email] or modern PeopleKit [data-hovercard-id]),
+  //    explicitly excluding any elements inside the message body editor.
+  const chipElements = container.querySelectorAll<HTMLElement>('[email], [data-hovercard-id]');
+  for (const el of chipElements) {
+    if (el.closest(EDITOR_SELECTORS)) {
+      continue;
+    }
+    const attrValue = el.getAttribute('email') ?? el.getAttribute('data-hovercard-id') ?? '';
+    addEmails(extractValidRecipientEmails(attrValue));
   }
 
-  return 'unspecified-recipient';
+  // 2. Fallback to actual typed recipient inputs (To/Cc/Bcc), rejecting placeholders/labels
+  if (emails.length === 0) {
+    const inputSelectors = [
+      'input[name="to"]',
+      'textarea[name="to"]',
+      'input[name="cc"]',
+      'textarea[name="cc"]',
+      'input[name="bcc"]',
+      'textarea[name="bcc"]',
+      'input[role="combobox"][aria-label*="To" i]',
+      'input[peoplekit-id]',
+    ].join(', ');
+
+    const inputs = container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      inputSelectors,
+    );
+    for (const input of inputs) {
+      if (input.closest(EDITOR_SELECTORS)) {
+        continue;
+      }
+      const raw = input.value?.trim() ?? '';
+      const placeholder = input.getAttribute('placeholder')?.trim() ?? '';
+      if (!raw || (placeholder && raw === placeholder)) {
+        continue;
+      }
+      addEmails(extractValidRecipientEmails(raw));
+    }
+  }
+
+  if (emails.length === 0) {
+    return null;
+  }
+
+  // Join complete validated addresses within the 320-char backend limit
+  let joined = '';
+  for (const email of emails) {
+    const next = joined ? `${joined}, ${email}` : email;
+    if (next.length > 320) {
+      break;
+    }
+    joined = next;
+  }
+
+  return joined || emails[0]!.slice(0, 320);
 }
 
 /**

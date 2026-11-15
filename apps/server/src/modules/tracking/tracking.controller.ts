@@ -4,8 +4,23 @@ import { AppError } from '../../middleware/errorHandler.js';
 import { TRANSPARENT_1X1_PNG } from '../../utils/pngPixel.js';
 import * as trackingService from './tracking.service.js';
 
+const RECIPIENT_EMAIL_REGEX = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
+
+function isValidRecipientReference(value: string): boolean {
+  const parts = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length > 0 && parts.every((part) => RECIPIENT_EMAIL_REGEX.test(part));
+}
+
 const registerTrackingSchema = z.object({
-  recipientReference: z.string().trim().min(1).max(320),
+  recipientReference: z
+    .string()
+    .trim()
+    .min(1)
+    .max(320)
+    .refine(isValidRecipientReference, 'Recipient must contain valid email address(es)'),
   subject: z.string().trim().max(255).optional(),
 });
 
