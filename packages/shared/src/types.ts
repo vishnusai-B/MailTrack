@@ -92,9 +92,17 @@ export interface DashboardAnalyticsResponse {
   rangeDays: number;
   from: string;
   to: string;
+  totalDispatchedEmails: number;
+  emailsWithRecordedActivity: number;
+  emailsWithLikelyProxyActivity: number;
+  emailsWithSuspectedScannerActivity: number;
+  emailsWithPixelActivity: number;
+  totalPixelRequests: number;
   statusCounts: TrackingStatusCounts;
   classificationCounts: EventClassificationCounts;
+  classificationBreakdown: EventClassificationCounts;
   dailyActivity: DailyActivityPoint[];
+  pixelActivityHeatmap: number[][];
   recentEvents: ActivityEventItem[];
 }
 

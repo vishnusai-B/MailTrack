@@ -7,6 +7,7 @@ import { TableSkeleton } from '../components/Skeleton.js';
 import { ReminderStatusBadge } from '../components/StatusBadge.js';
 import { Button } from '../components/ui/Button.js';
 import { INPUT_CLASS, SurfaceCard } from '../components/ui/Card.js';
+import { ModalDialog } from '../components/ui/Dialog.js';
 import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
@@ -28,23 +29,46 @@ export function RemindersPage({ onSelectEmail, onNotify }: RemindersPageProps) {
   const [page, setPage] = useState(1);
 
   const [data, setData] = useState<PaginatedRemindersResponse | null>(null);
+  const [tabCounts, setTabCounts] = useState<Partial<Record<ReminderFilter, number>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [rescheduleId, setRescheduleId] = useState<string | null>(null);
-  const [rescheduleValue, setRescheduleValue] = useState('');
+  const [snoozeId, setSnoozeId] = useState<string | null>(null);
+  const [customSnoozeValue, setCustomSnoozeValue] = useState('');
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
 
   const loadReminders = useCallback(
     (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
-      apiClient
-        .listReminders({ filter, page, limit: 15 }, signal)
-        .then((res) => setData(res))
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          setError(err instanceof ApiError ? err.message : 'Unable to load reminders.');
+
+      const otherTabs = FILTER_TABS.map((t) => t.value).filter((v) => v !== filter);
+
+      Promise.allSettled([
+        apiClient.listReminders({ filter, page, limit: 15 }, signal),
+        ...otherTabs.map((tab) =>
+          apiClient.listReminders({ filter: tab, page: 1, limit: 1 }, signal),
+        ),
+      ])
+        .then(([activeRes, ...otherRes]) => {
+          if (activeRes.status === 'rejected') {
+            const err = activeRes.reason;
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            setError(err instanceof ApiError ? err.message : 'Unable to load reminders.');
+            return;
+          }
+
+          setData(activeRes.value);
+          const nextCounts: Partial<Record<ReminderFilter, number>> = {
+            [filter]: activeRes.value.total,
+          };
+          otherTabs.forEach((tab, idx) => {
+            const res = otherRes[idx];
+            if (res && res.status === 'fulfilled') {
+              nextCounts[tab] = res.value.total;
+            }
+          });
+          setTabCounts(nextCounts);
         })
         .finally(() => setLoading(false));
     },
@@ -67,17 +91,15 @@ export function RemindersPage({ onSelectEmail, onNotify }: RemindersPageProps) {
     }
   }
 
-  async function handleReschedule(id: string) {
-    if (!rescheduleValue) return;
-    const dueIso = new Date(rescheduleValue).toISOString();
+  async function handleSnoozeTo(id: string, isoDate: string) {
     try {
-      await apiClient.updateReminder(id, { dueAt: dueIso });
-      onNotify('success', 'Reminder rescheduled.');
-      setRescheduleId(null);
-      setRescheduleValue('');
+      await apiClient.updateReminder(id, { dueAt: isoDate });
+      onNotify('success', 'Reminder snoozed.');
+      setSnoozeId(null);
+      setCustomSnoozeValue('');
       loadReminders();
     } catch (err) {
-      onNotify('error', err instanceof ApiError ? err.message : 'Failed to reschedule reminder.');
+      onNotify('error', err instanceof ApiError ? err.message : 'Failed to snooze reminder.');
     }
   }
 
@@ -93,40 +115,52 @@ export function RemindersPage({ onSelectEmail, onNotify }: RemindersPageProps) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="tablist"
-          aria-label="Reminder filter"
-          className="inline-flex flex-wrap items-center rounded-lg border border-neutral-200/90 bg-white p-0.5 shadow-2xs"
-        >
-          {FILTER_TABS.map((tab) => {
-            const active = filter === tab.value;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => {
-                  setFilter(tab.value);
-                  setPage(1);
-                }}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'bg-neutral-900 text-white shadow-2xs'
-                    : 'text-neutral-600 hover:text-neutral-950'
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+    <div className="space-y-4">
+      {/* Tabs with Counts */}
+      <div
+        role="tablist"
+        aria-label="Reminder filter"
+        className="inline-flex flex-wrap rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-subtle)] p-0.5"
+      >
+        {FILTER_TABS.map((tab) => {
+          const active = filter === tab.value;
+          const count = tabCounts[tab.value];
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                setFilter(tab.value);
+                setPage(1);
+                setSnoozeId(null);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-[12px] font-medium transition-colors duration-150 ${
+                active
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {count !== undefined ? (
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[11px] tabular-nums ${
+                    active
+                      ? 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
+                      : 'text-[var(--text-muted)]'
+                  }`}
+                >
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
-        <TableSkeleton rows={5} cols={4} />
+        <TableSkeleton rows={5} />
       ) : error ? (
         <ErrorState
           title="Unable to load reminders"
@@ -135,138 +169,181 @@ export function RemindersPage({ onSelectEmail, onNotify }: RemindersPageProps) {
         />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
-          title={`No ${filter} reminders`}
-          description="Schedule a follow-up reminder from any Tracked Email detail view."
+          title={filter === 'upcoming' ? 'No reminders yet' : `No ${filter} reminders`}
+          description={
+            filter === 'upcoming'
+              ? 'No reminders yet. Set one from any tracked email.'
+              : `No ${filter} follow-up reminders right now.`
+          }
         />
       ) : (
         <SurfaceCard className="overflow-hidden">
-          <ul className="divide-y divide-neutral-100">
-            {data.items.map((reminder) => (
-              <li
-                key={reminder.id}
-                className="space-y-3 px-5 py-4 transition hover:bg-neutral-50/50"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {reminder.trackedEmail ? (
-                        <button
-                          type="button"
-                          onClick={() => onSelectEmail(reminder.trackedEmail!.id)}
-                          className="text-left text-sm font-semibold text-neutral-950 transition hover:text-blue-600"
-                        >
-                          {reminder.trackedEmail.subject || '(No subject)'}
-                        </button>
-                      ) : (
-                        <span className="text-sm font-semibold text-neutral-950">
-                          Tracked Email
-                        </span>
-                      )}
-                      <ReminderStatusBadge status={reminder.status} />
-                    </div>
-                    {reminder.trackedEmail ? (
-                      <div className="mt-0.5 text-xs text-neutral-500">
-                        To {reminder.trackedEmail.recipientReference}
-                      </div>
-                    ) : null}
-                    {reminder.note ? (
-                      <p className="mt-2 rounded-lg border border-neutral-100 bg-neutral-50/80 px-3 py-2 text-xs text-neutral-700">
-                        {reminder.note}
-                      </p>
-                    ) : null}
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 tabular-nums">
-                      <IconClock className="h-3.5 w-3.5 text-neutral-400" />
-                      <span>
-                        Due:{' '}
+          <ul className="divide-y divide-[var(--border-default)]">
+            {data.items.map((reminder) => {
+              const isOverdue =
+                reminder.status === 'PENDING' && new Date(reminder.dueAt).getTime() < Date.now();
+              const isPending = reminder.status === 'PENDING';
+              const isSnoozing = snoozeId === reminder.id;
+
+              return (
+                <li
+                  key={reminder.id}
+                  className={`p-4 transition-colors duration-150 ${
+                    isOverdue
+                      ? 'border-l-2 border-l-[var(--status-danger-dot)] bg-[var(--status-danger-bg)]/25'
+                      : 'hover:bg-[var(--bg-subtle)]/60'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ReminderStatusBadge status={reminder.status} />
                         <span
-                          className={`font-medium ${
-                            filter === 'overdue' ? 'text-rose-700' : 'text-neutral-800'
+                          className={`text-[12px] tabular-nums ${
+                            isOverdue
+                              ? 'font-medium text-[var(--status-danger-text)]'
+                              : 'text-[var(--text-secondary)]'
                           }`}
                         >
-                          {formatDateTime(reminder.dueAt)}
+                          Due {formatDateTime(reminder.dueAt)}
                         </span>
-                      </span>
-                      {reminder.completedAt
-                        ? ` · Completed ${formatDateTime(reminder.completedAt)}`
-                        : ''}
+                      </div>
+
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onSelectEmail(reminder.trackedEmailId)}
+                          className="text-left text-[13px] font-semibold text-[var(--text-primary)] hover:text-[var(--accent-text)] hover:underline"
+                        >
+                          {reminder.trackedEmail?.subject || 'No subject'}
+                        </button>
+                        {reminder.trackedEmail?.recipientReference ? (
+                          <span className="ml-2 text-[12px] text-[var(--text-secondary)]">
+                            ({reminder.trackedEmail.recipientReference})
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {reminder.note ? (
+                        <p className="mt-1 text-[12px] text-[var(--text-secondary)]">
+                          {reminder.note}
+                        </p>
+                      ) : null}
                     </div>
+
+                    {isPending ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => void handleComplete(reminder.id)}
+                        >
+                          <IconCheck className="h-3.5 w-3.5" />
+                          Complete
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() =>
+                            setSnoozeId((cur) => (cur === reminder.id ? null : reminder.id))
+                          }
+                        >
+                          <IconClock className="h-3.5 w-3.5" />
+                          Snooze
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setCancelConfirmId(reminder.id)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
 
-                  {reminder.status === 'PENDING' ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="success" onClick={() => void handleComplete(reminder.id)}>
-                        <IconCheck className="h-3.5 w-3.5" />
-                        Complete
-                      </Button>
+                  {isSnoozing ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--border-default)] pt-3">
+                      <span className="text-[12px] text-[var(--text-muted)]">Snooze until:</span>
                       <Button
+                        size="sm"
                         variant="secondary"
                         onClick={() => {
-                          setRescheduleId(rescheduleId === reminder.id ? null : reminder.id);
-                          setRescheduleValue('');
+                          const d = new Date(Date.now() + 24 * 3600 * 1000);
+                          void handleSnoozeTo(reminder.id, d.toISOString());
                         }}
                       >
-                        Reschedule
+                        Tomorrow
                       </Button>
-                      <button
-                        type="button"
-                        onClick={() => setCancelConfirmId(reminder.id)}
-                        className="inline-flex h-8 items-center rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          const d = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+                          void handleSnoozeTo(reminder.id, d.toISOString());
+                        }}
                       >
-                        Cancel
-                      </button>
+                        In 3 days
+                      </Button>
+                      <input
+                        type="datetime-local"
+                        aria-label="Custom snooze date and time"
+                        value={customSnoozeValue}
+                        onChange={(e) => setCustomSnoozeValue(e.target.value)}
+                        className={`${INPUT_CLASS} w-auto`}
+                      />
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={!customSnoozeValue}
+                        onClick={() =>
+                          void handleSnoozeTo(
+                            reminder.id,
+                            new Date(customSnoozeValue).toISOString(),
+                          )
+                        }
+                      >
+                        Save
+                      </Button>
                     </div>
                   ) : null}
-                </div>
-
-                {rescheduleId === reminder.id ? (
-                  <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-neutral-200/80 bg-neutral-50/80 p-3 text-xs">
-                    <label
-                      htmlFor={`reschedule-${reminder.id}`}
-                      className="font-medium text-neutral-700"
-                    >
-                      New due date &amp; time:
-                    </label>
-                    <input
-                      id={`reschedule-${reminder.id}`}
-                      type="datetime-local"
-                      value={rescheduleValue}
-                      onChange={(e) => setRescheduleValue(e.target.value)}
-                      className={`${INPUT_CLASS} h-8 w-auto text-xs`}
-                    />
-                    <Button variant="primary" onClick={() => void handleReschedule(reminder.id)}>
-                      Save
-                    </Button>
-                  </div>
-                ) : null}
-
-                {cancelConfirmId === reminder.id ? (
-                  <div
-                    role="alertdialog"
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50/80 px-3.5 py-2.5 text-xs text-rose-950"
-                  >
-                    <span>Cancel this follow-up reminder?</span>
-                    <div className="flex gap-2">
-                      <Button variant="danger" onClick={() => void handleCancel(reminder.id)}>
-                        Confirm Cancel
-                      </Button>
-                      <Button variant="secondary" onClick={() => setCancelConfirmId(null)}>
-                        Keep
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
 
           <PaginationBar
             page={data.page}
             totalPages={data.totalPages}
-            total={data.total}
+            totalItems={data.total}
+            itemLabel="reminders"
             onPageChange={setPage}
           />
         </SurfaceCard>
       )}
+
+      {/* Cancel Confirmation Modal */}
+      <ModalDialog
+        open={Boolean(cancelConfirmId)}
+        onClose={() => setCancelConfirmId(null)}
+        title="Cancel reminder?"
+        description="This reminder will be moved to the Cancelled tab."
+        maxWidthClass="max-w-sm"
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setCancelConfirmId(null)}>
+            Keep reminder
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (cancelConfirmId) void handleCancel(cancelConfirmId);
+            }}
+          >
+            Confirm cancel
+          </Button>
+        </div>
+      </ModalDialog>
     </div>
   );
 }

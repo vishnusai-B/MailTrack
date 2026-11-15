@@ -2,12 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { DashboardAnalyticsResponse } from '@mailtrack/shared';
 import {
   ClassificationDistributionChart,
-  DailyActivityChart,
   DailyTrendByClassificationChart,
-  StatusDistributionChart,
+  SendTimeHeatmap,
 } from '../components/Charts.js';
 import { ErrorState } from '../components/ErrorState.js';
-import { ChartSkeleton } from '../components/Skeleton.js';
+import { CardSkeleton, ChartSkeleton } from '../components/Skeleton.js';
 import { SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
 import { ApiError, apiClient } from '../lib/api.js';
 
@@ -28,9 +27,12 @@ export function AnalyticsPage() {
     (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
+
       apiClient
         .getAnalytics({ days }, signal)
-        .then((res) => setData(res))
+        .then((analyticsRes) => {
+          setData(analyticsRes);
+        })
         .catch((err: unknown) => {
           if (err instanceof DOMException && err.name === 'AbortError') return;
           setError(err instanceof ApiError ? err.message : 'Unable to load analytics.');
@@ -46,26 +48,43 @@ export function AnalyticsPage() {
     return () => controller.abort();
   }, [loadAnalytics]);
 
-  const automatedCount = data
-    ? data.classificationCounts.LIKELY_PROXY + data.classificationCounts.SUSPECTED_SCANNER
+  const sentCount = data
+    ? (data.totalDispatchedEmails ?? data.statusCounts.DISPATCHED + data.statusCounts.SENT)
     : 0;
+  const emailsWithActivity = data?.emailsWithPixelActivity ?? 0;
+  const emailsWithRecorded = data?.emailsWithRecordedActivity ?? 0;
+  const engagementRate = sentCount > 0 ? Math.round((emailsWithRecorded / sentCount) * 100) : 0;
+
+  const classification = data
+    ? (data.classificationBreakdown ?? data.classificationCounts)
+    : undefined;
+  const automatedCount = classification
+    ? classification.LIKELY_PROXY + classification.SUSPECTED_SCANNER
+    : 0;
+  const automatedShare =
+    classification && classification.totalEvents > 0
+      ? Math.round((automatedCount / classification.totalEvents) * 100)
+      : null;
 
   return (
     <div className="space-y-5">
-      <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-        <div className="text-xs text-neutral-500">
-          Pixel activity and delivery status over your selected window.
+      <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="text-[12px] text-[var(--text-secondary)]">
+          Signal trends and automated traffic share for the selected date window.
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <label htmlFor="analytics-range" className="text-xs font-medium text-neutral-700">
-            Date range
+        <div className="flex items-center gap-2">
+          <label
+            htmlFor="analytics-range"
+            className="text-[12px] font-medium text-[var(--text-secondary)]"
+          >
+            Range
           </label>
           <select
             id="analytics-range"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className={`${SELECT_CLASS} w-auto`}
+            className={SELECT_CLASS}
           >
             {RANGE_OPTIONS.map((opt) => (
               <option key={opt.days} value={opt.days}>
@@ -77,11 +96,12 @@ export function AnalyticsPage() {
       </SurfaceCard>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <ChartSkeleton />
-          <ChartSkeleton />
-          <ChartSkeleton />
-          <ChartSkeleton />
+        <div className="space-y-5">
+          <CardSkeleton count={4} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
         </div>
       ) : error || !data ? (
         <ErrorState
@@ -91,41 +111,78 @@ export function AnalyticsPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
-              <div className="text-[11px] font-medium text-neutral-500">Tracked Emails</div>
-              <div className="mt-1.5 text-2xl font-semibold text-neutral-950 tabular-nums">
-                {data.statusCounts.totalEmails}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="text-[12px] font-medium text-[var(--text-secondary)]">
+                Emails sent
+              </div>
+              <div className="mt-1.5 text-[24px] font-semibold text-[var(--text-primary)] tabular-nums">
+                {sentCount}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">Last {days} days</div>
+            </div>
+
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="text-[12px] font-medium text-[var(--text-secondary)]">
+                Emails with pixel activity
+              </div>
+              <div className="mt-1.5 text-[24px] font-semibold text-[var(--text-primary)] tabular-nums">
+                {emailsWithActivity}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)] tabular-nums">
+                {emailsWithRecorded} with likely human signals
               </div>
             </div>
-            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
-              <div className="text-[11px] font-medium text-neutral-500">Pixel Events ({days}d)</div>
-              <div className="mt-1.5 text-2xl font-semibold text-blue-600 tabular-nums">
-                {data.classificationCounts.totalEvents}
+
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="text-[12px] font-medium text-[var(--text-secondary)]">
+                Estimated engagement rate
+              </div>
+              <div className="mt-1.5 text-[24px] font-semibold text-[var(--text-primary)] tabular-nums">
+                {`${engagementRate}%`}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Pixel requests can be generated by proxies, scanners, caching, or repeated loads; a
+                recorded pixel event does not prove a person read the email.
               </div>
             </div>
-            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
-              <div className="text-[11px] font-medium text-neutral-500">Standard Requests</div>
-              <div className="mt-1.5 text-2xl font-semibold text-indigo-600 tabular-nums">
-                {data.classificationCounts.RECORDED}
+
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="text-[12px] font-medium text-[var(--text-secondary)]">
+                Automated traffic share
               </div>
-            </div>
-            <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 shadow-2xs">
-              <div className="text-[11px] font-medium text-neutral-500">Proxy &amp; Scanner</div>
-              <div className="mt-1.5 text-2xl font-semibold text-amber-600 tabular-nums">
-                {automatedCount}
+              <div className="mt-1.5 text-[24px] font-semibold text-[var(--text-primary)] tabular-nums">
+                {automatedShare !== null ? `${automatedShare}%` : '—'}
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--text-muted)] tabular-nums">
+                {automatedCount} proxy or scanner requests
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <DailyActivityChart
-              data={data.dailyActivity}
-              title={`Recorded Pixel Requests Over Time (${days}d)`}
+          <DailyTrendByClassificationChart
+            data={data.dailyActivity}
+            takeaway={
+              data.classificationCounts.totalEvents > 0
+                ? `${data.classificationCounts.RECORDED} likely human signals vs ${automatedCount} automated fetches over ${days} days (dates in UTC).`
+                : undefined
+            }
+          />
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ClassificationDistributionChart
+              counts={data.classificationCounts}
+              takeaway={
+                automatedShare !== null
+                  ? `${automatedShare}% of pixel requests matched proxy or scanner signatures.`
+                  : undefined
+              }
             />
-            <StatusDistributionChart counts={data.statusCounts} />
-            <ClassificationDistributionChart counts={data.classificationCounts} />
-            <DailyTrendByClassificationChart data={data.dailyActivity} />
+            <SendTimeHeatmap
+              events={data.recentEvents}
+              heatmap={data.pixelActivityHeatmap}
+              days={days}
+            />
           </div>
         </>
       )}

@@ -547,8 +547,24 @@ describe('Tracking Lifecycle, Strict SENT Confirmation, Expiration & Security', 
     const today = new Date();
     mockEventFindMany
       .mockResolvedValueOnce([
-        { occurredAt: today, classification: 'RECORDED' },
-        { occurredAt: today, classification: 'LIKELY_PROXY' },
+        {
+          trackedEmailId: 'trk-1',
+          occurredAt: today,
+          classification: 'RECORDED',
+          trackedEmail: { status: 'DISPATCHED', createdAt: today },
+        },
+        {
+          trackedEmailId: 'trk-1',
+          occurredAt: today,
+          classification: 'RECORDED',
+          trackedEmail: { status: 'DISPATCHED', createdAt: today },
+        },
+        {
+          trackedEmailId: 'trk-2',
+          occurredAt: today,
+          classification: 'LIKELY_PROXY',
+          trackedEmail: { status: 'DISPATCHED', createdAt: today },
+        },
       ])
       .mockResolvedValueOnce([
         {
@@ -586,8 +602,245 @@ describe('Tracking Lifecycle, Strict SENT Confirmation, Expiration & Security', 
       SUSPECTED_SCANNER: 0,
       totalEvents: 6,
     });
+    expect(res.body.classificationBreakdown).toEqual(res.body.classificationCounts);
+    expect(res.body.totalDispatchedEmails).toBe(3);
+    expect(res.body.emailsWithPixelActivity).toBe(2);
+    expect(res.body.emailsWithRecordedActivity).toBe(1);
+    expect(res.body.emailsWithLikelyProxyActivity).toBe(1);
+    expect(res.body.emailsWithSuspectedScannerActivity).toBe(0);
+    expect(res.body.totalPixelRequests).toBe(6);
+    expect(res.body.pixelActivityHeatmap).toHaveLength(7);
     expect(res.body.dailyActivity).toHaveLength(7);
     expect(res.body.recentEvents).toHaveLength(1);
+    expect(mockEmailGroupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          createdAt: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }),
+        }),
+      }),
+    );
+  });
+
+  it('aggregates >100 tracked emails, repeated events, automated-only emails, empty ranges, and 7/14/30/90d windows with user isolation', async () => {
+    const auth = makeAuthHeader('user-iso', 'iso@example.com');
+
+    // 1. >100 emails + repeated events + proxy-only + scanner-only
+    mockEmailGroupBy.mockResolvedValueOnce([{ status: 'DISPATCHED', _count: { _all: 150 } }]);
+    mockEventGroupBy.mockResolvedValueOnce([
+      { classification: 'RECORDED', _count: { _all: 125 } },
+      { classification: 'LIKELY_PROXY', _count: { _all: 4 } },
+      { classification: 'SUSPECTED_SCANNER', _count: { _all: 3 } },
+    ]);
+    const currentNow = new Date();
+    const recordedEvents = Array.from({ length: 120 }, (_, i) => ({
+      trackedEmailId: `trk-rec-${i}`,
+      occurredAt: currentNow,
+      classification: 'RECORDED' as const,
+      trackedEmail: { status: 'DISPATCHED' as const, createdAt: currentNow },
+    }));
+    // Repeated RECORDED events for trk-rec-0 should not inflate emailsWithRecorded
+    for (let i = 0; i < 5; i++) {
+      recordedEvents.push({
+        trackedEmailId: 'trk-rec-0',
+        occurredAt: currentNow,
+        classification: 'RECORDED' as const,
+        trackedEmail: { status: 'DISPATCHED' as const, createdAt: currentNow },
+      });
+    }
+    const automatedOnlyEvents = [
+      {
+        trackedEmailId: 'trk-proxy-only',
+        occurredAt: currentNow,
+        classification: 'LIKELY_PROXY' as const,
+        trackedEmail: { status: 'DISPATCHED' as const, createdAt: currentNow },
+      },
+      {
+        trackedEmailId: 'trk-proxy-only',
+        occurredAt: currentNow,
+        classification: 'LIKELY_PROXY' as const,
+        trackedEmail: { status: 'DISPATCHED' as const, createdAt: currentNow },
+      },
+      {
+        trackedEmailId: 'trk-scanner-only',
+        occurredAt: currentNow,
+        classification: 'SUSPECTED_SCANNER' as const,
+        trackedEmail: { status: 'DISPATCHED' as const, createdAt: currentNow },
+      },
+    ];
+    mockEventFindMany
+      .mockResolvedValueOnce([...recordedEvents, ...automatedOnlyEvents])
+      .mockResolvedValueOnce([]);
+
+    const largeRes = await request(app)
+      .get('/api/tracking/analytics?days=30')
+      .set('Authorization', auth);
+
+    expect(largeRes.status).toBe(200);
+    expect(largeRes.body.totalDispatchedEmails).toBe(150);
+    expect(largeRes.body.emailsWithPixelActivity).toBe(122);
+    expect(largeRes.body.emailsWithRecordedActivity).toBe(120);
+    expect(largeRes.body.emailsWithLikelyProxyActivity).toBe(1);
+    expect(largeRes.body.emailsWithSuspectedScannerActivity).toBe(1);
+    expect(largeRes.body.totalPixelRequests).toBe(132);
+    expect(largeRes.body.classificationCounts.totalEvents).toBe(132);
+    expect(largeRes.body.dailyActivity).toHaveLength(30);
+
+    // 2. Empty date range
+    mockEmailGroupBy.mockResolvedValueOnce([]);
+    mockEventGroupBy.mockResolvedValueOnce([]);
+    mockEventFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    const emptyRes = await request(app)
+      .get('/api/tracking/analytics?days=14')
+      .set('Authorization', auth);
+    expect(emptyRes.status).toBe(200);
+    expect(emptyRes.body.dailyActivity).toHaveLength(14);
+    expect(emptyRes.body.totalDispatchedEmails).toBe(0);
+    expect(emptyRes.body.emailsWithPixelActivity).toBe(0);
+    expect(emptyRes.body.emailsWithRecordedActivity).toBe(0);
+    expect(emptyRes.body.emailsWithLikelyProxyActivity).toBe(0);
+    expect(emptyRes.body.emailsWithSuspectedScannerActivity).toBe(0);
+    expect(emptyRes.body.totalPixelRequests).toBe(0);
+    expect(emptyRes.body.pixelActivityHeatmap.flat().every((v: number) => v === 0)).toBe(true);
+
+    // 3. 90-day window & user isolation check
+    mockEmailGroupBy.mockResolvedValueOnce([]);
+    mockEventGroupBy.mockResolvedValueOnce([]);
+    mockEventFindMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    const res90 = await request(app)
+      .get('/api/tracking/analytics?days=90')
+      .set('Authorization', auth);
+    expect(res90.status).toBe(200);
+    expect(res90.body.dailyActivity).toHaveLength(90);
+    expect(mockEventFindMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trackedEmail: { userId: 'user-iso' },
+          occurredAt: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }),
+        }),
+      }),
+    );
+
+    // 4. UTC daily bucket boundaries (23:59:59.999Z vs 00:00:00.000Z next UTC day)
+    mockEmailGroupBy.mockResolvedValueOnce([{ status: 'DISPATCHED', _count: { _all: 1 } }]);
+    mockEventGroupBy.mockResolvedValueOnce([{ classification: 'RECORDED', _count: { _all: 2 } }]);
+    mockEventFindMany
+      .mockResolvedValueOnce([
+        {
+          trackedEmailId: 'trk-utc',
+          occurredAt: new Date('2026-11-13T23:59:59.999Z'),
+          classification: 'RECORDED',
+          trackedEmail: {
+            status: 'DISPATCHED',
+            createdAt: new Date('2026-11-13T12:00:00.000Z'),
+          },
+        },
+        {
+          trackedEmailId: 'trk-utc',
+          occurredAt: new Date('2026-11-14T00:00:00.000Z'),
+          classification: 'RECORDED',
+          trackedEmail: {
+            status: 'DISPATCHED',
+            createdAt: new Date('2026-11-13T12:00:00.000Z'),
+          },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const utcRes = await request(app)
+      .get('/api/tracking/analytics?from=2026-11-13T00:00:00.000Z&to=2026-11-14T23:59:59.999Z')
+      .set('Authorization', auth);
+    expect(utcRes.status).toBe(200);
+    expect(utcRes.body.dailyActivity).toEqual([
+      {
+        date: '2026-11-13',
+        totalEvents: 1,
+        recorded: 1,
+        likelyProxy: 0,
+        suspectedScanner: 0,
+      },
+      {
+        date: '2026-11-14',
+        totalEvents: 1,
+        recorded: 1,
+        likelyProxy: 0,
+        suspectedScanner: 0,
+      },
+    ]);
+  });
+
+  it('enforces selected-window dispatched cohort on emailsWithRecordedActivity while preserving event-activity metrics and user isolation', async () => {
+    const auth = makeAuthHeader('user-cohort', 'cohort@example.com');
+    const inWindow = new Date('2026-11-14T10:00:00.000Z');
+    const beforeWindow = new Date('2026-11-01T10:00:00.000Z');
+
+    // Cohort: 2 emails dispatched inside window (trk-in-rec, trk-in-proxy)
+    mockEmailGroupBy.mockResolvedValueOnce([{ status: 'DISPATCHED', _count: { _all: 2 } }]);
+    mockEventGroupBy.mockResolvedValueOnce([
+      { classification: 'RECORDED', _count: { _all: 3 } },
+      { classification: 'LIKELY_PROXY', _count: { _all: 1 } },
+    ]);
+    mockEventFindMany
+      .mockResolvedValueOnce([
+        // 1. Dispatched inside window + repeated RECORDED inside window -> counted once
+        {
+          trackedEmailId: 'trk-in-rec',
+          occurredAt: inWindow,
+          classification: 'RECORDED',
+          trackedEmail: { status: 'DISPATCHED', createdAt: inWindow },
+        },
+        {
+          trackedEmailId: 'trk-in-rec',
+          occurredAt: new Date('2026-11-14T11:00:00.000Z'),
+          classification: 'RECORDED',
+          trackedEmail: { status: 'DISPATCHED', createdAt: inWindow },
+        },
+        // 2. Dispatched BEFORE window + RECORDED inside window -> excluded from emailsWithRecordedActivity, included in emailsWithPixelActivity
+        {
+          trackedEmailId: 'trk-before-rec',
+          occurredAt: inWindow,
+          classification: 'RECORDED',
+          trackedEmail: { status: 'SENT', createdAt: beforeWindow },
+        },
+        // 3. Dispatched inside window + only LIKELY_PROXY inside window -> excluded from emailsWithRecordedActivity
+        {
+          trackedEmailId: 'trk-in-proxy',
+          occurredAt: inWindow,
+          classification: 'LIKELY_PROXY',
+          trackedEmail: { status: 'DISPATCHED', createdAt: inWindow },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const res = await request(app)
+      .get('/api/tracking/analytics?from=2026-11-10T00:00:00.000Z&to=2026-11-14T23:59:59.999Z')
+      .set('Authorization', auth);
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalDispatchedEmails).toBe(2);
+    expect(res.body.emailsWithRecordedActivity).toBe(1);
+    expect(res.body.emailsWithPixelActivity).toBe(3);
+    expect(res.body.emailsWithLikelyProxyActivity).toBe(1);
+    expect(res.body.emailsWithSuspectedScannerActivity).toBe(0);
+    expect(res.body.totalPixelRequests).toBe(4);
+    expect(mockEmailGroupBy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'user-cohort',
+          createdAt: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }),
+        }),
+      }),
+    );
+    expect(mockEventFindMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          trackedEmail: { userId: 'user-cohort' },
+          occurredAt: expect.objectContaining({ gte: expect.any(Date), lt: expect.any(Date) }),
+        }),
+      }),
+    );
   });
 
   it('returns paginated user-scoped events on GET /api/tracking/events', async () => {

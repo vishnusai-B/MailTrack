@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DashboardAnalyticsResponse } from '@mailtrack/shared';
-import { DailyActivityChart, StatusDistributionChart } from '../components/Charts.js';
-import { EmptyState } from '../components/EmptyState.js';
+import { DailyActivityChart } from '../components/Charts.js';
 import { ErrorState } from '../components/ErrorState.js';
-import { IconActivity, IconArrowUpRight, IconMail, IconSend } from '../components/Icons.js';
+import { IconAlertTriangle, IconArrowUpRight, IconCheck, IconInfo } from '../components/Icons.js';
 import { CardSkeleton, ChartSkeleton } from '../components/Skeleton.js';
-import { ClassificationBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
 import { Button } from '../components/ui/Button.js';
 import { SectionHeader, SurfaceCard } from '../components/ui/Card.js';
 import { ApiError, apiClient } from '../lib/api.js';
@@ -15,17 +13,21 @@ interface OverviewPageProps {
   onSelectEmail: (emailId: string) => void;
   onNavigateEmails: () => void;
   onNavigateActivity: () => void;
+  onNavigateReminders: () => void;
 }
-
-const OVERVIEW_RANGES = [7, 14, 30] as const;
 
 export function OverviewPage({
   onSelectEmail,
   onNavigateEmails,
   onNavigateActivity,
+  onNavigateReminders,
 }: OverviewPageProps) {
   const [days, setDays] = useState<number>(30);
   const [data, setData] = useState<DashboardAnalyticsResponse | null>(null);
+  const [pendingFollowUps, setPendingFollowUps] = useState<{
+    upcoming: number;
+    overdue: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,14 +35,30 @@ export function OverviewPage({
     (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
-      apiClient
-        .getAnalytics({ days }, signal)
-        .then((res) => {
-          setData(res);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          setError(err instanceof ApiError ? err.message : 'Unable to load dashboard overview.');
+
+      Promise.allSettled([
+        apiClient.getAnalytics({ days }, signal),
+        apiClient.listReminders({ filter: 'upcoming', page: 1, limit: 1 }, signal),
+        apiClient.listReminders({ filter: 'overdue', page: 1, limit: 1 }, signal),
+      ])
+        .then(([analyticsRes, upcomingRes, overdueRes]) => {
+          if (analyticsRes.status === 'rejected') {
+            const err = analyticsRes.reason;
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            setError(err instanceof ApiError ? err.message : 'Unable to load dashboard overview.');
+            return;
+          }
+
+          setData(analyticsRes.value);
+
+          if (upcomingRes.status === 'fulfilled' && overdueRes.status === 'fulfilled') {
+            setPendingFollowUps({
+              upcoming: Number.isFinite(upcomingRes.value?.total) ? upcomingRes.value.total : 0,
+              overdue: Number.isFinite(overdueRes.value?.total) ? overdueRes.value.total : 0,
+            });
+          } else {
+            setPendingFollowUps(null);
+          }
         })
         .finally(() => {
           setLoading(false);
@@ -57,12 +75,9 @@ export function OverviewPage({
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <CardSkeleton count={3} />
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <ChartSkeleton />
-          <ChartSkeleton />
-        </div>
+      <div className="space-y-5">
+        <CardSkeleton count={4} />
+        <ChartSkeleton />
       </div>
     );
   }
@@ -78,228 +93,257 @@ export function OverviewPage({
   }
 
   const { statusCounts, classificationCounts, dailyActivity, recentEvents } = data;
+  const isZeroState = statusCounts.totalEmails === 0 && classificationCounts.totalEvents === 0;
 
-  const primaryMetrics = [
-    {
-      label: 'Total Tracked Emails',
-      value: statusCounts.totalEmails,
-      sublabel:
-        statusCounts.SENT > 0 ? `${statusCounts.SENT} confirmed SENT` : 'Registered in workspace',
-      icon: IconMail,
-      iconBg: 'bg-neutral-100 text-neutral-700',
-    },
-    {
-      label: 'Dispatched',
-      value: statusCounts.DISPATCHED,
-      sublabel: 'Sent from Gmail compose',
-      icon: IconSend,
-      iconBg: 'bg-sky-50 text-sky-600',
-    },
-    {
-      label: `Recorded Events (${days}d)`,
-      value: classificationCounts.totalEvents,
-      sublabel: 'Pixel requests, not unique opens',
-      icon: IconActivity,
-      iconBg: 'bg-indigo-50 text-indigo-600',
-    },
-  ];
-
-  const secondaryStatuses = [
-    {
-      label: 'Pending',
-      value: statusCounts.PENDING,
-      hint: 'Waiting to send',
-      dot: 'bg-amber-500',
-      valueTone: 'text-amber-700',
-    },
-    {
-      label: 'Failed',
-      value: statusCounts.FAILED,
-      hint: 'Send did not complete',
-      dot: 'bg-rose-500',
-      valueTone: 'text-rose-700',
-    },
-    {
-      label: 'Expired',
-      value: statusCounts.EXPIRED,
-      hint: 'Retention window ended',
-      dot: 'bg-neutral-400',
-      valueTone: 'text-neutral-700',
-    },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* Context Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-neutral-500">
-          Review your tracking activity across the last {days} days.
+  if (isZeroState) {
+    return (
+      <SurfaceCard className="p-6">
+        <h2 className="text-[16px] font-semibold text-[var(--text-primary)]">
+          Get started with MailTrack
+        </h2>
+        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          No tracking activity yet. Complete these steps to record your first email signals.
         </p>
 
-        <div className="flex items-center gap-2">
-          <div
-            role="group"
-            aria-label="Overview date range"
-            className="inline-flex rounded-lg border border-neutral-200/90 bg-white p-0.5 shadow-2xs"
-          >
-            {OVERVIEW_RANGES.map((range) => {
-              const active = days === range;
-              return (
-                <button
-                  key={range}
-                  type="button"
-                  onClick={() => setDays(range)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    active ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:text-neutral-950'
-                  }`}
-                >
-                  {range}d
-                </button>
-              );
-            })}
-          </div>
-          <Button variant="secondary" onClick={onNavigateEmails}>
-            Tracked Emails
-            <IconArrowUpRight className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Primary KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {primaryMetrics.map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <div
-              key={metric.label}
-              className="rounded-xl border border-neutral-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition duration-150 hover:border-neutral-300/90"
+        <ol className="mt-5 space-y-3">
+          {[
+            {
+              step: '1',
+              title: 'Install and sign in to the Chrome extension',
+              detail: 'Connect your MailTrack account inside Gmail compose.',
+            },
+            {
+              step: '2',
+              title: 'Send a tracked email from Gmail',
+              detail: 'Make sure the tracking toggle is enabled before clicking Send.',
+            },
+            {
+              step: '3',
+              title: 'Wait for pixel activity',
+              detail: 'Pixel requests and proxy/scanner classifications appear here automatically.',
+            },
+          ].map((item) => (
+            <li
+              key={item.step}
+              className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-subtle)] p-3.5"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-neutral-500">{metric.label}</span>
-                <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg ${metric.iconBg}`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[12px] font-semibold text-[var(--accent-text)] tabular-nums">
+                {item.step}
+              </span>
+              <div>
+                <div className="text-[13px] font-medium text-[var(--text-primary)]">
+                  {item.title}
+                </div>
+                <div className="mt-0.5 text-[12px] text-[var(--text-secondary)]">{item.detail}</div>
               </div>
-              <div className="mt-3 text-3xl font-semibold tracking-tight text-neutral-950 tabular-nums">
-                {metric.value}
-              </div>
-              <div className="mt-1 text-xs text-neutral-500">{metric.sublabel}</div>
-            </div>
-          );
-        })}
-      </div>
+            </li>
+          ))}
+        </ol>
+      </SurfaceCard>
+    );
+  }
 
-      {/* Secondary Lifecycle Strip */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {secondaryStatuses.map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.03)]"
-          >
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-neutral-700">
-                <span className={`h-2 w-2 rounded-full ${item.dot}`} />
-                {item.label}
-              </div>
-              <div className="mt-0.5 text-[11px] text-neutral-400">{item.hint}</div>
-            </div>
-            <div className={`text-lg font-semibold tabular-nums ${item.valueTone}`}>
-              {item.value}
-            </div>
+  const emailsSent = data.totalDispatchedEmails ?? statusCounts.DISPATCHED + statusCounts.SENT;
+  const emailsWithActivity = data.emailsWithPixelActivity ?? 0;
+  const emailsWithRecorded = data.emailsWithRecordedActivity ?? 0;
+  const totalPixelRequests = data.totalPixelRequests ?? classificationCounts.totalEvents;
+  const estimatedEngagementRate =
+    emailsSent > 0 ? Math.round((emailsWithRecorded / emailsSent) * 100) : 0;
+
+  const totalFollowUps =
+    pendingFollowUps !== null ? pendingFollowUps.upcoming + pendingFollowUps.overdue : null;
+
+  const nonZeroAlerts: string[] = [];
+  if (statusCounts.FAILED > 0) {
+    nonZeroAlerts.push(
+      `${statusCounts.FAILED} ${statusCounts.FAILED === 1 ? 'email' : 'emails'} failed to send`,
+    );
+  }
+  if (statusCounts.PENDING > 0) {
+    nonZeroAlerts.push(`${statusCounts.PENDING} pending`);
+  }
+  if (statusCounts.EXPIRED > 0) {
+    nonZeroAlerts.push(`${statusCounts.EXPIRED} expired`);
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Compact 4-KPI Row */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+          <div className="text-[12px] font-medium text-[var(--text-secondary)]">Emails sent</div>
+          <div className="mt-1.5 text-[24px] font-semibold tracking-tight text-[var(--text-primary)] tabular-nums">
+            {emailsSent}
           </div>
-        ))}
+          <div className="mt-1 text-[12px] text-[var(--text-muted)] tabular-nums">
+            {statusCounts.totalEmails} tracked ({days}d)
+          </div>
+        </div>
+
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+          <div className="text-[12px] font-medium text-[var(--text-secondary)]">
+            Emails with pixel activity
+          </div>
+          <div className="mt-1.5 text-[24px] font-semibold tracking-tight text-[var(--text-primary)] tabular-nums">
+            {emailsWithActivity}
+          </div>
+          <div className="mt-1 text-[12px] text-[var(--text-muted)] tabular-nums">
+            {totalPixelRequests} pixel requests ({days}d)
+          </div>
+        </div>
+
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-medium text-[var(--text-secondary)]">
+              Estimated engagement rate
+            </span>
+            <span
+              title="Pixel requests can be generated by email proxies, security scanners, caching, or repeated image requests. A recorded pixel event does not prove that a person read the email."
+              className="inline-flex cursor-help items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
+            >
+              <IconInfo className="h-3 w-3" />
+              Estimate
+            </span>
+          </div>
+          <div className="mt-1.5 text-[24px] font-semibold tracking-tight text-[var(--text-primary)] tabular-nums">
+            {`${estimatedEngagementRate}%`}
+          </div>
+          <div className="mt-1 text-[12px] text-[var(--text-muted)] tabular-nums">
+            {emailsWithRecorded} {emailsWithRecorded === 1 ? 'email' : 'emails'} with likely human
+            signals ({days}d)
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onNavigateReminders}
+          className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--bg-subtle)]"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] font-medium text-[var(--text-secondary)]">
+              Pending follow-ups
+            </span>
+            <IconArrowUpRight className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+          </div>
+          <div className="mt-1.5 text-[24px] font-semibold tracking-tight text-[var(--text-primary)] tabular-nums">
+            {totalFollowUps !== null ? totalFollowUps : '—'}
+          </div>
+          <div className="mt-1 text-[12px] text-[var(--text-muted)] tabular-nums">
+            {pendingFollowUps && pendingFollowUps.overdue > 0
+              ? `${pendingFollowUps.overdue} overdue`
+              : 'Scheduled reminders'}
+          </div>
+        </button>
       </div>
 
-      {statusCounts.SENT > 0 ? (
-        <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-900">
-          <strong className="font-semibold">Trusted SENT confirmations:</strong> {statusCounts.SENT}{' '}
-          {statusCounts.SENT === 1 ? 'record has' : 'records have'} server-side confirmation.
+      {/* Inline Status Alert (only shown when Pending/Failed/Expired > 0) */}
+      {nonZeroAlerts.length > 0 ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-4 py-2.5 text-[13px]"
+        >
+          <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+            <IconAlertTriangle className="h-4 w-4 shrink-0 text-[var(--status-warning-dot)]" />
+            <span className="tabular-nums">{nonZeroAlerts.join(' · ')}</span>
+          </div>
+          <Button size="sm" variant="ghost" onClick={onNavigateEmails}>
+            Review emails
+          </Button>
         </div>
       ) : null}
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DailyActivityChart
-          data={dailyActivity}
-          title={`Daily Recorded Pixel Requests (${days}d)`}
-        />
-        <StatusDistributionChart counts={statusCounts} />
-      </div>
+      {/* Time-Series Activity Chart */}
+      <DailyActivityChart
+        data={dailyActivity}
+        title="Pixel activity"
+        selectedDays={days}
+        onSelectRange={setDays}
+      />
 
-      {/* Recent Tracking Activity */}
+      {/* Recent Activity */}
       <SurfaceCard className="overflow-hidden">
         <SectionHeader
-          title="Recent Tracking Activity"
-          description="Latest pixel requests recorded across your emails."
-          actions={
-            <>
-              <Button variant="ghost" onClick={onNavigateActivity}>
-                View all activity
+          title="Recent activity"
+          description="Latest pixel requests. Click any row to inspect the email timeline."
+          action={
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={onNavigateActivity}>
+                All activity
               </Button>
-              <Button variant="secondary" onClick={onNavigateEmails}>
-                Browse emails
+              <Button size="sm" variant="secondary" onClick={onNavigateEmails}>
+                Tracked emails
               </Button>
-            </>
+            </div>
           }
         />
 
         {recentEvents.length === 0 ? (
-          <div className="p-6">
-            <EmptyState
-              title="No tracking activity yet"
-              description="Send an email with tracking enabled in Gmail to start logging pixel activity."
-              action={
-                <Button variant="secondary" onClick={onNavigateEmails}>
-                  Go to Tracked Emails
-                </Button>
-              }
-            />
+          <div className="px-4 py-8 text-center text-[13px] text-[var(--text-muted)]">
+            No pixel requests recorded in this window.
           </div>
         ) : (
-          <ul className="divide-y divide-neutral-100">
-            {recentEvents.map((event) => (
-              <li
-                key={event.id}
-                className="flex flex-col gap-2 px-5 py-3.5 transition duration-150 hover:bg-neutral-50/80 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <span
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-500"
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSelectEmail(event.trackedEmail.id)}
-                        className="truncate text-left text-sm font-medium text-neutral-900 transition hover:text-blue-600"
-                      >
-                        {event.trackedEmail.subject || '(No subject)'}
-                      </button>
-                      <TrackingStatusBadge status={event.trackedEmail.status} />
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-neutral-500">
-                      To {event.trackedEmail.recipientReference}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 flex-wrap items-center gap-2.5 pl-5 sm:pl-0">
-                  <ClassificationBadge classification={event.classification} />
-                  <span
-                    title={formatDateTime(event.occurredAt)}
-                    className="min-w-[4.5rem] text-right font-mono text-[11px] text-neutral-400 tabular-nums"
+          <ul className="divide-y divide-[var(--border-default)]">
+            {recentEvents.slice(0, 8).map((ev) => {
+              const isLikelyHuman = ev.classification === 'RECORDED';
+              return (
+                <li key={ev.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectEmail(ev.trackedEmailId)}
+                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--bg-subtle)]"
                   >
-                    {formatRelativeTime(event.occurredAt)}
-                  </span>
-                </div>
-              </li>
-            ))}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`truncate text-[13px] font-medium ${
+                            ev.trackedEmail.subject
+                              ? 'text-[var(--text-primary)]'
+                              : 'italic text-[var(--text-muted)]'
+                          }`}
+                        >
+                          {ev.trackedEmail.subject || 'No subject'}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] text-[var(--text-secondary)]">
+                        {ev.trackedEmail.recipientReference}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[12px] font-medium ${
+                          isLikelyHuman
+                            ? 'bg-[var(--status-success-bg)] text-[var(--status-success-text)]'
+                            : 'bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]'
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            isLikelyHuman
+                              ? 'bg-[var(--status-success-dot)]'
+                              : 'bg-[var(--status-warning-dot)]'
+                          }`}
+                          aria-hidden="true"
+                        />
+                        {isLikelyHuman ? 'Likely opened' : 'Probably automated'}
+                      </span>
+                      <span
+                        title={formatDateTime(ev.occurredAt)}
+                        className="hidden w-20 text-right text-[12px] text-[var(--text-muted)] tabular-nums sm:inline"
+                      >
+                        {formatRelativeTime(ev.occurredAt)}
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </SurfaceCard>
     </div>
   );
 }
+
+// Keep unused icon check clean if needed
+void IconCheck;

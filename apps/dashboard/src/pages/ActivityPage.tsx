@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { EventClassification, PaginatedTrackingEventsResponse } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
-import { IconDownload } from '../components/Icons.js';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconDownload,
+  IconInfo,
+  IconX,
+} from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import { ClassificationBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
 import { Button } from '../components/ui/Button.js';
 import { INPUT_CLASS, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
 import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
-import { formatDateTime } from '../lib/format.js';
+import { formatDateTime, formatRelativeTime } from '../lib/format.js';
 
 interface ActivityPageProps {
   onSelectEmail: (emailId: string) => void;
@@ -17,23 +23,38 @@ interface ActivityPageProps {
 }
 
 const CLASSIFICATION_OPTIONS: Array<{ value: EventClassification | ''; label: string }> = [
-  { value: '', label: 'All classifications' },
-  { value: 'RECORDED', label: 'RECORDED' },
-  { value: 'LIKELY_PROXY', label: 'LIKELY_PROXY' },
-  { value: 'SUSPECTED_SCANNER', label: 'SUSPECTED_SCANNER' },
+  { value: '', label: 'All signal types' },
+  { value: 'RECORDED', label: 'Opened (likely human)' },
+  { value: 'LIKELY_PROXY', label: 'Email client prefetch' },
+  { value: 'SUSPECTED_SCANNER', label: 'Security scanner' },
 ];
+
+const DISCLAIMER_STORAGE_KEY = 'mailtrack.activity.disclaimerDismissed';
 
 export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
   const [classification, setClassification] = useState<EventClassification | ''>('');
+  const [hideAutomated, setHideAutomated] = useState(true);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 20;
 
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [disclaimerDismissed, setDisclaimerDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem(DISCLAIMER_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
   const [data, setData] = useState<PaginatedTrackingEventsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const effectiveClassification: EventClassification | undefined =
+    classification || (hideAutomated ? 'RECORDED' : undefined);
 
   const loadEvents = useCallback(
     (signal?: AbortSignal) => {
@@ -48,7 +69,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
           {
             page,
             limit,
-            classification: classification || undefined,
+            classification: effectiveClassification,
             from: fromIso,
             to: toIso,
           },
@@ -61,7 +82,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
         })
         .finally(() => setLoading(false));
     },
-    [page, limit, classification, fromDate, toDate],
+    [page, limit, effectiveClassification, fromDate, toDate],
   );
 
   useEffect(() => {
@@ -70,13 +91,13 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
     return () => controller.abort();
   }, [loadEvents]);
 
-  const hasFilters = Boolean(classification || fromDate || toDate);
-
-  function clearFilters() {
-    setClassification('');
-    setFromDate('');
-    setToDate('');
-    setPage(1);
+  function dismissDisclaimer() {
+    setDisclaimerDismissed(true);
+    try {
+      window.localStorage.setItem(DISCLAIMER_STORAGE_KEY, '1');
+    } catch {
+      // Ignore storage errors
+    }
   }
 
   async function handleExportCsv() {
@@ -87,7 +108,7 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
       await apiClient.downloadCsv(
         '/api/exports/events',
         {
-          classification: classification || undefined,
+          classification: effectiveClassification,
           from: fromIso,
           to: toIso,
         },
@@ -101,107 +122,144 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
     }
   }
 
+  const hasFilters = Boolean(classification || fromDate || toDate || !hideAutomated);
+
   return (
-    <div className="space-y-5">
-      <div
-        role="note"
-        className="rounded-xl border border-neutral-200/80 bg-white px-4 py-2.5 text-xs text-neutral-600 shadow-2xs"
-      >
-        Each row logs an individual pixel request. Repeated requests are listed separately and are{' '}
-        <strong className="font-semibold text-neutral-900">not</strong> counted as unique human
-        opens.
-      </div>
+    <div className="space-y-4">
+      {!disclaimerDismissed ? (
+        <div
+          role="note"
+          className="flex items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-subtle)] px-3.5 py-2.5 text-[12px] text-[var(--text-secondary)]"
+        >
+          <div className="flex items-start gap-2">
+            <IconInfo className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+            <span>
+              Each row logs an individual pixel request. Repeated requests are listed separately and
+              are not counted as unique human opens.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={dismissDisclaimer}
+            aria-label="Dismiss note"
+            className="shrink-0 rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+          >
+            <IconX className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
 
       <SurfaceCard className="p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div>
-            <label
-              htmlFor="activity-classification"
-              className="block text-xs font-medium text-neutral-600"
-            >
-              Classification
-            </label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <select
               id="activity-classification"
+              aria-label="Signal classification"
               value={classification}
               onChange={(e) => {
-                setClassification(e.target.value as EventClassification | '');
+                const next = e.target.value as EventClassification | '';
+                setClassification(next);
+                if (next && next !== 'RECORDED') {
+                  setHideAutomated(false);
+                }
                 setPage(1);
               }}
-              className={`${SELECT_CLASS} mt-1`}
+              className={SELECT_CLASS}
             >
               {CLASSIFICATION_OPTIONS.map((opt) => (
-                <option key={opt.label} value={opt.value}>
+                <option key={opt.value || 'all'} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
             </select>
-          </div>
 
-          <div>
-            <label htmlFor="activity-from" className="block text-xs font-medium text-neutral-600">
-              From date
-            </label>
             <input
-              id="activity-from"
               type="date"
+              aria-label="From date"
               value={fromDate}
               onChange={(e) => {
                 setFromDate(e.target.value);
                 setPage(1);
               }}
-              className={`${INPUT_CLASS} mt-1 text-xs`}
+              className={`${INPUT_CLASS} w-auto`}
             />
-          </div>
 
-          <div>
-            <label htmlFor="activity-to" className="block text-xs font-medium text-neutral-600">
-              To date
-            </label>
             <input
-              id="activity-to"
               type="date"
+              aria-label="To date"
               value={toDate}
               onChange={(e) => {
                 setToDate(e.target.value);
                 setPage(1);
               }}
-              className={`${INPUT_CLASS} mt-1 text-xs`}
+              className={`${INPUT_CLASS} w-auto`}
             />
-          </div>
-        </div>
 
-        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3">
-          <div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-subtle)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)]">
+              <input
+                type="checkbox"
+                checked={hideAutomated}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHideAutomated(checked);
+                  if (checked && classification && classification !== 'RECORDED') {
+                    setClassification('');
+                  }
+                  setPage(1);
+                }}
+                className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-[var(--accent)]"
+              />
+              Hide automated
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2">
             {hasFilters ? (
-              <Button variant="ghost" onClick={clearFilters}>
-                Clear filters
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setClassification('');
+                  setHideAutomated(true);
+                  setFromDate('');
+                  setToDate('');
+                  setPage(1);
+                }}
+              >
+                Reset
               </Button>
             ) : null}
+            <Button variant="secondary" loading={exporting} onClick={handleExportCsv}>
+              <IconDownload className="h-3.5 w-3.5" />
+              Export CSV
+            </Button>
           </div>
-          <Button variant="secondary" onClick={() => void handleExportCsv()} disabled={exporting}>
-            <IconDownload className="h-3.5 w-3.5" />
-            {exporting ? 'Exporting...' : 'Export CSV'}
-          </Button>
         </div>
       </SurfaceCard>
 
       {loading ? (
-        <TableSkeleton rows={6} cols={5} />
+        <TableSkeleton rows={6} />
       ) : error ? (
         <ErrorState title="Unable to load activity" message={error} onRetry={() => loadEvents()} />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
-          title="No tracking events found"
+          title="No matching activity"
           description={
-            hasFilters
-              ? 'No events match your current classification or date filters.'
-              : 'Pixel requests will appear here as tracked emails receive traffic.'
+            hideAutomated
+              ? 'No likely-human pixel requests found for these filters. Turn off "Hide automated" to inspect proxy and scanner fetches.'
+              : 'No pixel requests match your current filter selection.'
           }
           action={
-            hasFilters ? (
-              <Button variant="primary" onClick={clearFilters}>
-                Clear filters
+            hideAutomated ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setHideAutomated(false);
+                  setPage(1);
+                }}
+              >
+                Show automated traffic
               </Button>
             ) : undefined
           }
@@ -209,55 +267,104 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
       ) : (
         <SurfaceCard className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-neutral-200/80 text-left text-sm">
-              <thead className="bg-neutral-50/80 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
+            <table className="w-full min-w-[680px] border-collapse text-left text-[13px]">
+              <thead className="border-b border-[var(--border-default)] bg-[var(--bg-subtle)] text-[12px] font-medium text-[var(--text-secondary)]">
                 <tr>
-                  <th scope="col" className="px-5 py-3">
-                    Timestamp
+                  <th className="w-9 px-3 py-2.5">
+                    <span className="sr-only">Expand</span>
                   </th>
-                  <th scope="col" className="px-5 py-3">
-                    Associated Email
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Email Status
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Classification
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Metadata
-                  </th>
+                  <th className="px-3 py-2.5">Email</th>
+                  <th className="px-3 py-2.5">Signal</th>
+                  <th className="px-3 py-2.5">Email status</th>
+                  <th className="px-3 py-2.5 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100 bg-white">
-                {data.items.map((ev) => (
-                  <tr key={ev.id} className="transition-colors hover:bg-neutral-50/80">
-                    <td className="px-5 py-3.5 text-xs whitespace-nowrap text-neutral-600 tabular-nums">
-                      {formatDateTime(ev.occurredAt)}
-                    </td>
-                    <td className="max-w-[260px] px-5 py-3.5">
-                      <button
-                        type="button"
-                        onClick={() => onSelectEmail(ev.trackedEmail.id)}
-                        className="block truncate text-left text-xs font-medium text-neutral-900 transition hover:text-blue-600"
-                      >
-                        {ev.trackedEmail.subject || '(No subject)'}
-                      </button>
-                      <div className="truncate text-[11px] text-neutral-500">
-                        {ev.trackedEmail.recipientReference}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <TrackingStatusBadge status={ev.trackedEmail.status} />
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <ClassificationBadge classification={ev.classification} />
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-xs whitespace-nowrap text-neutral-500">
-                      {ev.eventType}
-                    </td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-[var(--border-default)]">
+                {data.items.map((ev) => {
+                  const isExpanded = expandedRowId === ev.id;
+                  return (
+                    <Fragment key={ev.id}>
+                      <tr className="transition-colors duration-150 hover:bg-[var(--bg-subtle)]">
+                        <td className="px-3 py-2.5">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-label={
+                              isExpanded ? 'Collapse technical details' : 'Expand technical details'
+                            }
+                            onClick={() =>
+                              setExpandedRowId((cur) => (cur === ev.id ? null : ev.id))
+                            }
+                            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                          >
+                            {isExpanded ? (
+                              <IconChevronDown className="h-3.5 w-3.5" />
+                            ) : (
+                              <IconChevronRight className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="max-w-[280px] px-3 py-2.5">
+                          <button
+                            type="button"
+                            onClick={() => onSelectEmail(ev.trackedEmailId)}
+                            className="block max-w-full truncate text-left font-medium text-[var(--text-primary)] hover:text-[var(--accent-text)] hover:underline"
+                          >
+                            {ev.trackedEmail.subject || 'No subject'}
+                          </button>
+                          <div className="truncate text-[12px] text-[var(--text-secondary)]">
+                            {ev.trackedEmail.recipientReference}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <ClassificationBadge classification={ev.classification} />
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <TrackingStatusBadge status={ev.trackedEmail.status} />
+                        </td>
+                        <td
+                          title={formatDateTime(ev.occurredAt)}
+                          className="px-3 py-2.5 text-right text-[12px] whitespace-nowrap text-[var(--text-muted)] tabular-nums"
+                        >
+                          {formatRelativeTime(ev.occurredAt)}
+                        </td>
+                      </tr>
+
+                      {isExpanded ? (
+                        <tr className="bg-[var(--bg-subtle)]/70">
+                          <td colSpan={5} className="px-4 py-3">
+                            <dl className="grid grid-cols-1 gap-3 text-[12px] sm:grid-cols-4">
+                              <div>
+                                <dt className="text-[var(--text-muted)]">Request ID</dt>
+                                <dd className="mt-0.5 font-mono text-[var(--text-primary)]">
+                                  {ev.id}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[var(--text-muted)]">Tracking ID</dt>
+                                <dd className="mt-0.5 font-mono text-[var(--text-primary)]">
+                                  {ev.trackedEmailId}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[var(--text-muted)]">Raw signal</dt>
+                                <dd className="mt-0.5 font-mono text-[var(--text-primary)]">
+                                  {ev.eventType} · {ev.classification}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-[var(--text-muted)]">Exact timestamp</dt>
+                                <dd className="mt-0.5 font-mono text-[var(--text-primary)] tabular-nums">
+                                  {formatDateTime(ev.occurredAt)}
+                                </dd>
+                              </div>
+                            </dl>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -265,8 +372,8 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
           <PaginationBar
             page={data.page}
             totalPages={data.totalPages}
-            total={data.total}
-            unitLabel="total events"
+            totalItems={data.total}
+            itemLabel="events"
             onPageChange={setPage}
           />
         </SurfaceCard>

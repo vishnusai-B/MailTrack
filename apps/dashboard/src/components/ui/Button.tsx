@@ -1,44 +1,49 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
-export type ButtonSize = 'sm' | 'md';
-
-const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary:
-    'bg-neutral-900 text-white shadow-xs hover:bg-neutral-800 border border-neutral-900 disabled:hover:bg-neutral-900',
-  secondary:
-    'bg-white text-neutral-700 border border-neutral-200/90 shadow-2xs hover:bg-neutral-50 hover:text-neutral-950 hover:border-neutral-300',
-  ghost:
-    'bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 border border-transparent',
-  danger:
-    'bg-rose-600 text-white border border-rose-600 shadow-xs hover:bg-rose-700 disabled:hover:bg-rose-600',
-  success:
-    'bg-emerald-600 text-white border border-emerald-600 shadow-xs hover:bg-emerald-700 disabled:hover:bg-emerald-600',
-};
-
-const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-xs gap-1.5 rounded-lg',
-  md: 'h-9 px-3.5 text-xs gap-2 rounded-lg',
-};
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonSize = 'sm' | 'md';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  loading?: boolean;
   children: ReactNode;
 }
 
+const VARIANT_CLASSES: Record<ButtonVariant, string> = {
+  primary:
+    'bg-[var(--accent)] text-[var(--accent-contrast)] border border-transparent hover:bg-[var(--accent-hover)] active:opacity-90',
+  secondary:
+    'bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] hover:border-[var(--border-strong)] active:bg-[var(--bg-subtle)]',
+  ghost:
+    'bg-transparent text-[var(--text-secondary)] border border-transparent hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
+  danger:
+    'bg-[var(--status-danger-dot)] text-white border border-transparent hover:opacity-90 active:opacity-80',
+};
+
+const SIZE_CLASSES: Record<ButtonSize, string> = {
+  sm: 'h-7 px-2.5 text-[12px] gap-1.5 rounded-[var(--radius-sm)]',
+  md: 'h-8 px-3 text-[13px] gap-1.5 rounded-[var(--radius-md)]',
+};
+
 export function Button({
   variant = 'secondary',
-  size = 'sm',
-  type = 'button',
+  size = 'md',
+  loading = false,
+  disabled,
   className = '',
+  type = 'button',
   children,
   ...props
 }: ButtonProps) {
+  const isDisabled = Boolean(disabled || loading);
+
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center font-medium transition duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
+      disabled={isDisabled}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center font-medium whitespace-nowrap transition-[background-color,border-color,color,opacity] duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
       {...props}
     >
       {children}

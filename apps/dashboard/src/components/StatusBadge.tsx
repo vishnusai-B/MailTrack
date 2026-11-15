@@ -5,151 +5,213 @@ import type {
   TrackingStatus,
 } from '@mailtrack/shared';
 
-const STATUS_STYLES: Record<
-  TrackingStatus,
-  { label: string; className: string; dot: string; description: string }
-> = {
+interface BadgeSpec {
+  label: string;
+  bg: string;
+  text: string;
+  dot: string;
+  description: string;
+}
+
+const TRACKING_STATUS_SPECS: Record<TrackingStatus, BadgeSpec> = {
   PENDING: {
-    label: 'PENDING',
-    className: 'bg-amber-50/90 text-amber-800 ring-amber-600/20',
-    dot: 'bg-amber-500',
+    label: 'Pending',
+    bg: 'bg-[var(--status-warning-bg)]',
+    text: 'text-[var(--status-warning-text)]',
+    dot: 'bg-[var(--status-warning-dot)]',
     description: 'Registered and waiting to send.',
   },
   DISPATCHED: {
-    label: 'DISPATCHED',
-    className: 'bg-sky-50/90 text-sky-800 ring-sky-600/20',
-    dot: 'bg-sky-500',
-    description: 'Sent from Gmail compose; awaiting trusted server confirmation.',
+    label: 'Dispatched',
+    bg: 'bg-[var(--status-info-bg)]',
+    text: 'text-[var(--status-info-text)]',
+    dot: 'bg-[var(--status-info-dot)]',
+    description: 'Sent from Gmail compose; awaiting server-side confirmation.',
   },
   SENT: {
-    label: 'SENT',
-    className: 'bg-emerald-50/90 text-emerald-800 ring-emerald-600/20',
-    dot: 'bg-emerald-500',
+    label: 'Sent',
+    bg: 'bg-[var(--status-success-bg)]',
+    text: 'text-[var(--status-success-text)]',
+    dot: 'bg-[var(--status-success-dot)]',
     description: 'Confirmed sent by server-side evidence.',
   },
   FAILED: {
-    label: 'FAILED',
-    className: 'bg-rose-50/90 text-rose-800 ring-rose-600/20',
-    dot: 'bg-rose-500',
+    label: 'Failed',
+    bg: 'bg-[var(--status-danger-bg)]',
+    text: 'text-[var(--status-danger-text)]',
+    dot: 'bg-[var(--status-danger-dot)]',
     description: 'Send attempt did not complete.',
   },
   EXPIRED: {
-    label: 'EXPIRED',
-    className: 'bg-neutral-100 text-neutral-600 ring-neutral-500/20',
-    dot: 'bg-neutral-400',
-    description: 'Tracking window expired.',
+    label: 'Expired',
+    bg: 'bg-[var(--status-neutral-bg)]',
+    text: 'text-[var(--status-neutral-text)]',
+    dot: 'bg-[var(--status-neutral-dot)]',
+    description: 'Tracking retention window elapsed.',
   },
 };
 
-const CLASSIFICATION_STYLES: Record<
-  EventClassification,
-  { label: string; className: string; dot: string; description: string }
-> = {
+export const CLASSIFICATION_SPECS: Record<EventClassification, BadgeSpec> = {
   RECORDED: {
-    label: 'RECORDED',
-    className: 'bg-indigo-50/90 text-indigo-700 ring-indigo-600/20',
-    dot: 'bg-indigo-500',
-    description: 'Standard pixel request without proxy or scanner signature.',
+    label: 'Opened (likely human)',
+    bg: 'bg-[var(--status-success-bg)]',
+    text: 'text-[var(--status-success-text)]',
+    dot: 'bg-[var(--status-success-dot)]',
+    description: 'Standard pixel request without proxy or scanner signatures.',
   },
   LIKELY_PROXY: {
-    label: 'LIKELY_PROXY',
-    className: 'bg-amber-50/90 text-amber-800 ring-amber-600/20',
-    dot: 'bg-amber-500',
+    label: 'Email client prefetch',
+    bg: 'bg-[var(--status-warning-bg)]',
+    text: 'text-[var(--status-warning-text)]',
+    dot: 'bg-[var(--status-warning-dot)]',
     description: 'Matches image proxy or caching fetcher characteristics.',
   },
   SUSPECTED_SCANNER: {
-    label: 'SUSPECTED_SCANNER',
-    className: 'bg-rose-50/90 text-rose-700 ring-rose-600/20',
-    dot: 'bg-rose-500',
-    description: 'Matches automated security scanner or pre-fetcher patterns.',
+    label: 'Security scanner',
+    bg: 'bg-[var(--status-danger-bg)]',
+    text: 'text-[var(--status-danger-text)]',
+    dot: 'bg-[var(--status-danger-dot)]',
+    description: 'Matches automated security scanner or link-prefetcher patterns.',
   },
 };
 
-export function TrackingStatusBadge({ status }: { status: TrackingStatus }) {
-  const style = STATUS_STYLES[status];
+const CAMPAIGN_STATUS_SPECS: Record<CampaignStatus, Omit<BadgeSpec, 'description'>> = {
+  ACTIVE: {
+    label: 'Active',
+    bg: 'bg-[var(--status-success-bg)]',
+    text: 'text-[var(--status-success-text)]',
+    dot: 'bg-[var(--status-success-dot)]',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    bg: 'bg-[var(--status-info-bg)]',
+    text: 'text-[var(--status-info-text)]',
+    dot: 'bg-[var(--status-info-dot)]',
+  },
+  ARCHIVED: {
+    label: 'Archived',
+    bg: 'bg-[var(--status-neutral-bg)]',
+    text: 'text-[var(--status-neutral-text)]',
+    dot: 'bg-[var(--status-neutral-dot)]',
+  },
+};
+
+const REMINDER_STATUS_SPECS: Record<ReminderStatus, Omit<BadgeSpec, 'description'>> = {
+  PENDING: {
+    label: 'Pending',
+    bg: 'bg-[var(--status-warning-bg)]',
+    text: 'text-[var(--status-warning-text)]',
+    dot: 'bg-[var(--status-warning-dot)]',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    bg: 'bg-[var(--status-success-bg)]',
+    text: 'text-[var(--status-success-text)]',
+    dot: 'bg-[var(--status-success-dot)]',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    bg: 'bg-[var(--status-neutral-bg)]',
+    text: 'text-[var(--status-neutral-text)]',
+    dot: 'bg-[var(--status-neutral-dot)]',
+  },
+};
+
+function StatusPill({
+  label,
+  bg,
+  text,
+  dot,
+  title,
+}: {
+  label: string;
+  bg: string;
+  text: string;
+  dot: string;
+  title?: string;
+}) {
   return (
     <span
-      title={style.description}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ring-1 ring-inset ${style.className}`}
+      title={title}
+      className={`inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-0.5 text-[12px] font-medium whitespace-nowrap ${bg} ${text}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
-      {style.label}
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
+      {label}
     </span>
   );
 }
 
-export function OpenStatusBadge({
+export function TrackingStatusBadge({ status }: { status: TrackingStatus }) {
+  const spec = TRACKING_STATUS_SPECS[status];
+  return (
+    <StatusPill
+      label={spec.label}
+      bg={spec.bg}
+      text={spec.text}
+      dot={spec.dot}
+      title={spec.description}
+    />
+  );
+}
+
+export function ClassificationBadge({ classification }: { classification: EventClassification }) {
+  const spec = CLASSIFICATION_SPECS[classification];
+  return (
+    <StatusPill
+      label={spec.label}
+      bg={spec.bg}
+      text={spec.text}
+      dot={spec.dot}
+      title={spec.description}
+    />
+  );
+}
+
+export function CampaignStatusBadge({ status }: { status: CampaignStatus }) {
+  const spec = CAMPAIGN_STATUS_SPECS[status];
+  return <StatusPill label={spec.label} bg={spec.bg} text={spec.text} dot={spec.dot} />;
+}
+
+export function ReminderStatusBadge({ status }: { status: ReminderStatus }) {
+  const spec = REMINDER_STATUS_SPECS[status];
+  return <StatusPill label={spec.label} bg={spec.bg} text={spec.text} dot={spec.dot} />;
+}
+
+export function EngagementSignal({
   firstRecordedAt,
   eventCount = 0,
 }: {
   firstRecordedAt: string | null | undefined;
   eventCount?: number;
 }) {
-  const isOpened = Boolean(firstRecordedAt) || eventCount > 0;
-  if (isOpened) {
+  const hasActivity = Boolean(firstRecordedAt) || eventCount > 0;
+  const count = eventCount > 0 ? eventCount : hasActivity ? 1 : 0;
+
+  if (!hasActivity) {
     return (
       <span
-        title="At least one pixel request recorded."
-        className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-600/20 ring-inset"
+        title="No pixel requests have been recorded yet."
+        className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-muted)]"
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-        Opened{eventCount > 1 ? ` · ${eventCount}` : ''}
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--status-neutral-dot)]"
+          aria-hidden="true"
+        />
+        No activity
       </span>
     );
   }
 
   return (
     <span
-      title="No pixel requests recorded yet."
-      className="inline-flex items-center gap-1.5 rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 ring-1 ring-neutral-500/15 ring-inset"
+      title="Count of recorded pixel requests. Email image proxies and security scanners can also trigger pixel loads, so open the email detail drawer to inspect signal types."
+      className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--text-primary)] tabular-nums"
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" aria-hidden="true" />
-      Not opened
-    </span>
-  );
-}
-
-export function ClassificationBadge({ classification }: { classification: EventClassification }) {
-  const style = CLASSIFICATION_STYLES[classification];
-  return (
-    <span
-      title={style.description}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ring-1 ring-inset ${style.className}`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
-      {style.label}
-    </span>
-  );
-}
-
-const CAMPAIGN_STATUS_STYLES: Record<CampaignStatus, string> = {
-  ACTIVE: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  COMPLETED: 'bg-blue-50 text-blue-700 ring-blue-600/20',
-  ARCHIVED: 'bg-neutral-100 text-neutral-600 ring-neutral-500/20',
-};
-
-export function CampaignStatusBadge({ status }: { status: CampaignStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ring-1 ring-inset ${CAMPAIGN_STATUS_STYLES[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-const REMINDER_STATUS_STYLES: Record<ReminderStatus, string> = {
-  PENDING: 'bg-amber-50 text-amber-800 ring-amber-600/20',
-  COMPLETED: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
-  CANCELLED: 'bg-neutral-100 text-neutral-600 ring-neutral-500/20',
-};
-
-export function ReminderStatusBadge({ status }: { status: ReminderStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 font-mono text-[11px] font-medium ring-1 ring-inset ${REMINDER_STATUS_STYLES[status]}`}
-    >
-      {status}
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--status-success-dot)]"
+        aria-hidden="true"
+      />
+      {count} {count === 1 ? 'likely open' : 'likely opens'}
     </span>
   );
 }

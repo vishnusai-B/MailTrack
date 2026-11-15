@@ -572,14 +572,27 @@ export async function getTrackingAnalytics(
     to?: Date;
   },
 ): Promise<DashboardAnalyticsResponse> {
-  const toDate = params.to ?? new Date();
-  const fromDate =
+  const referenceDate = params.to ?? new Date();
+  const endDateExclusive = params.to
+    ? new Date(params.to.getTime() + 1)
+    : new Date(
+        Date.UTC(
+          referenceDate.getUTCFullYear(),
+          referenceDate.getUTCMonth(),
+          referenceDate.getUTCDate() + 1,
+          0,
+          0,
+          0,
+          0,
+        ),
+      );
+  const startDate =
     params.from ??
     new Date(
       Date.UTC(
-        toDate.getUTCFullYear(),
-        toDate.getUTCMonth(),
-        toDate.getUTCDate() - (params.days - 1),
+        referenceDate.getUTCFullYear(),
+        referenceDate.getUTCMonth(),
+        referenceDate.getUTCDate() - (params.days - 1),
         0,
         0,
         0,
@@ -587,7 +600,7 @@ export async function getTrackingAnalytics(
       ),
     );
 
-  if (fromDate > toDate) {
+  if (startDate >= endDateExclusive) {
     throw new AppError(
       400,
       'Start date (from) must be before or equal to end date (to)',
@@ -598,31 +611,42 @@ export async function getTrackingAnalytics(
   const [statusGroups, classificationGroups, rangeEvents, recentEvents] = await Promise.all([
     prisma.trackedEmail.groupBy({
       by: ['status'],
-      where: { userId },
+      where: {
+        userId,
+        createdAt: { gte: startDate, lt: endDateExclusive },
+      },
       _count: { _all: true },
     }),
     prisma.trackingEvent.groupBy({
       by: ['classification'],
       where: {
         trackedEmail: { userId },
-        occurredAt: { gte: fromDate, lte: toDate },
+        occurredAt: { gte: startDate, lt: endDateExclusive },
       },
       _count: { _all: true },
     }),
     prisma.trackingEvent.findMany({
       where: {
         trackedEmail: { userId },
-        occurredAt: { gte: fromDate, lte: toDate },
+        occurredAt: { gte: startDate, lt: endDateExclusive },
       },
       select: {
+        trackedEmailId: true,
         occurredAt: true,
         classification: true,
+        trackedEmail: {
+          select: {
+            status: true,
+            createdAt: true,
+          },
+        },
       },
       orderBy: { occurredAt: 'asc' },
     }),
     prisma.trackingEvent.findMany({
       where: {
         trackedEmail: { userId },
+        occurredAt: { gte: startDate, lt: endDateExclusive },
       },
       orderBy: { occurredAt: 'desc' },
       take: 10,
@@ -669,13 +693,10 @@ export async function getTrackingAnalytics(
 
   const dailyMap = new Map<string, DailyActivityPoint>();
   const cursor = new Date(
-    Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()),
-  );
-  const endCursor = new Date(
-    Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate()),
+    Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()),
   );
 
-  while (cursor <= endCursor) {
+  while (cursor < endDateExclusive) {
     const key = toUtcDateKey(cursor);
     dailyMap.set(key, {
       date: key,
@@ -687,7 +708,38 @@ export async function getTrackingAnalytics(
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  const emailsWithActivityIds = new Set<string>();
+  const emailsWithRecordedIds = new Set<string>();
+  const emailsWithLikelyProxyIds = new Set<string>();
+  const emailsWithSuspectedScannerIds = new Set<string>();
+  const pixelActivityHeatmap = Array.from({ length: 7 }, () => Array<number>(6).fill(0));
+
   for (const ev of rangeEvents) {
+    if (ev.trackedEmailId) {
+      emailsWithActivityIds.add(ev.trackedEmailId);
+      if (ev.classification === 'RECORDED') {
+        const inDispatchedCohort =
+          Boolean(ev.trackedEmail) &&
+          (ev.trackedEmail.status === 'DISPATCHED' || ev.trackedEmail.status === 'SENT') &&
+          ev.trackedEmail.createdAt >= startDate &&
+          ev.trackedEmail.createdAt < endDateExclusive;
+        if (inDispatchedCohort) {
+          emailsWithRecordedIds.add(ev.trackedEmailId);
+        }
+      } else if (ev.classification === 'LIKELY_PROXY') {
+        emailsWithLikelyProxyIds.add(ev.trackedEmailId);
+      } else if (ev.classification === 'SUSPECTED_SCANNER') {
+        emailsWithSuspectedScannerIds.add(ev.trackedEmailId);
+      }
+    }
+
+    if (ev.classification === 'RECORDED') {
+      const dayIdx = (ev.occurredAt.getUTCDay() + 6) % 7;
+      const bucketIdx = Math.min(Math.floor(ev.occurredAt.getUTCHours() / 4), 5);
+      pixelActivityHeatmap[dayIdx]![bucketIdx] =
+        (pixelActivityHeatmap[dayIdx]![bucketIdx] ?? 0) + 1;
+    }
+
     const key = toUtcDateKey(ev.occurredAt);
     let bucket = dailyMap.get(key);
     if (!bucket) {
@@ -707,14 +759,23 @@ export async function getTrackingAnalytics(
   }
 
   const dailyActivity = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const totalDispatchedEmails = statusCounts.DISPATCHED + statusCounts.SENT;
 
   return {
     rangeDays: dailyActivity.length,
-    from: fromDate.toISOString(),
-    to: toDate.toISOString(),
+    from: startDate.toISOString(),
+    to: endDateExclusive.toISOString(),
+    totalDispatchedEmails,
+    emailsWithRecordedActivity: emailsWithRecordedIds.size,
+    emailsWithLikelyProxyActivity: emailsWithLikelyProxyIds.size,
+    emailsWithSuspectedScannerActivity: emailsWithSuspectedScannerIds.size,
+    emailsWithPixelActivity: emailsWithActivityIds.size,
+    totalPixelRequests: classificationCounts.totalEvents,
     statusCounts,
     classificationCounts,
+    classificationBreakdown: classificationCounts,
     dailyActivity,
+    pixelActivityHeatmap,
     recentEvents: recentEvents.map(toActivityEventItem),
   };
 }

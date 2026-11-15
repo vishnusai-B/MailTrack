@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { User } from '@mailtrack/shared';
 import { ApiError, apiClient, getApiBaseUrl, setStoredToken } from '../lib/api.js';
 import { IconCheck, IconEye, IconEyeOff, IconMail } from './Icons.js';
+import { Button } from './ui/Button.js';
 import { INPUT_CLASS } from './ui/Card.js';
 
 interface AuthScreenProps {
@@ -28,6 +29,10 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!email.trim() || !password) {
+      setError('Enter both your email address and password.');
+      return;
+    }
     setLoading(true);
     try {
       const response =
@@ -53,31 +58,36 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
   }
 
   return (
-    <div className="grid min-h-screen bg-[#FAFAFB] lg:grid-cols-12">
+    <div className="grid min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] lg:grid-cols-12">
       {/* Product Context Panel (Desktop) */}
-      <aside className="hidden flex-col justify-between border-r border-neutral-200/80 bg-[#F4F5F7] p-10 lg:col-span-5 lg:flex xl:p-14">
+      <aside className="hidden flex-col justify-between border-r border-[var(--border-default)] bg-[var(--bg-subtle)] p-10 lg:col-span-5 lg:flex xl:p-14">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white shadow-2xs">
-            <IconMail className="h-4 w-4 text-blue-400" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-[var(--accent)] text-white">
+            <IconMail className="h-4 w-4" />
           </div>
-          <span className="text-base font-semibold tracking-tight text-neutral-950">MailTrack</span>
+          <span className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">
+            MailTrack
+          </span>
         </div>
 
         <div className="max-w-md space-y-6">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-neutral-950">
+            <h2 className="text-[24px] font-semibold tracking-tight text-[var(--text-primary)]">
               Clear email tracking for Gmail.
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-600">
-              Monitor pixel activity, classify proxy fetches separately from direct loads, and keep
+            <p className="mt-2 text-[14px] leading-relaxed text-[var(--text-secondary)]">
+              Monitor pixel activity, separate proxy fetches from likely human opens, and keep
               follow-ups on schedule.
             </p>
           </div>
 
-          <ul className="space-y-3 border-t border-neutral-200/80 pt-6">
+          <ul className="space-y-3 border-t border-[var(--border-default)] pt-6">
             {HIGHLIGHTS.map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-xs text-neutral-700">
-                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white text-blue-600 ring-1 ring-neutral-200">
+              <li
+                key={item}
+                className="flex items-start gap-2.5 text-[13px] text-[var(--text-secondary)]"
+              >
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-text)]">
                   <IconCheck className="h-2.5 w-2.5" />
                 </span>
                 <span className="leading-relaxed">{item}</span>
@@ -86,33 +96,35 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
           </ul>
         </div>
 
-        <div className="text-xs text-neutral-400">MailTrack Workspace</div>
+        <div className="text-[12px] text-[var(--text-muted)]">MailTrack Workspace</div>
       </aside>
 
-      {/* Form Panel */}
-      <main className="flex flex-col justify-center px-4 py-12 sm:px-6 lg:col-span-7 lg:px-12">
-        <div className="mx-auto w-full max-w-[400px]">
-          <div className="mb-8 flex items-center justify-center gap-2.5 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-900 text-white shadow-2xs">
-              <IconMail className="h-4 w-4 text-blue-400" />
+      {/* Auth Form Column */}
+      <main className="flex flex-col items-center justify-center px-4 py-10 sm:px-8 lg:col-span-7">
+        <div className="w-full max-w-[380px]">
+          <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+            <div className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] bg-[var(--accent)] text-white">
+              <IconMail className="h-4 w-4" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-neutral-950">MailTrack</span>
+            <span className="text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">
+              MailTrack
+            </span>
           </div>
 
-          <div className="rounded-2xl border border-neutral-200/90 bg-white p-7 shadow-[0_1px_3px_rgba(16,24,40,0.05)] sm:p-8">
-            <h1 className="text-lg font-semibold tracking-tight text-neutral-950">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-6 shadow-[var(--shadow-sm)] sm:p-7">
+            <h1 className="text-[20px] font-semibold tracking-tight text-[var(--text-primary)]">
               {mode === 'login' ? 'Sign in to your dashboard' : 'Create a MailTrack account'}
             </h1>
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
               {mode === 'login'
                 ? 'Enter your credentials to view tracked emails and activity.'
                 : 'Register an account to link the Gmail Chrome extension.'}
             </p>
 
-            {sessionMessage ? (
+            {sessionMessage && !error ? (
               <div
                 role="status"
-                className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900"
+                className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--status-warning-bg)] px-3 py-2 text-[12px] text-[var(--status-warning-text)]"
               >
                 {sessionMessage}
               </div>
@@ -121,51 +133,56 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
             {error ? (
               <div
                 role="alert"
-                className="mt-4 rounded-lg border border-rose-200 bg-rose-50/80 px-3.5 py-2.5 text-xs text-rose-800"
+                className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--status-danger-bg)] px-3 py-2 text-[12px] text-[var(--status-danger-text)]"
               >
                 {error}
               </div>
             ) : null}
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-5 space-y-4" noValidate>
               {mode === 'register' ? (
                 <div>
-                  <label htmlFor="auth-name" className="block text-xs font-medium text-neutral-700">
+                  <label
+                    htmlFor="auth-name"
+                    className="block text-[12px] font-medium text-[var(--text-secondary)]"
+                  >
                     Name (optional)
                   </label>
                   <input
                     id="auth-name"
                     type="text"
-                    autoComplete="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className={`${INPUT_CLASS} mt-1.5`}
                     placeholder="Alex Rivera"
+                    autoComplete="name"
+                    className={`${INPUT_CLASS} mt-1.5 h-9`}
                   />
                 </div>
               ) : null}
 
               <div>
-                <label htmlFor="auth-email" className="block text-xs font-medium text-neutral-700">
+                <label
+                  htmlFor="auth-email"
+                  className="block text-[12px] font-medium text-[var(--text-secondary)]"
+                >
                   Email address
                 </label>
                 <input
                   id="auth-email"
                   type="email"
                   required
-                  autoComplete="email"
-                  aria-invalid={error ? 'true' : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={`${INPUT_CLASS} mt-1.5`}
                   placeholder="you@company.com"
+                  autoComplete="email"
+                  className={`${INPUT_CLASS} mt-1.5 h-9`}
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="auth-password"
-                  className="block text-xs font-medium text-neutral-700"
+                  className="block text-[12px] font-medium text-[var(--text-secondary)]"
                 >
                   Password
                 </label>
@@ -174,19 +191,18 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
                     id="auth-password"
                     type={showPassword ? 'text' : 'password'}
                     required
-                    minLength={mode === 'register' ? 8 : 1}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    aria-invalid={error ? 'true' : undefined}
+                    minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className={`${INPUT_CLASS} pr-10`}
-                    placeholder={mode === 'register' ? 'Minimum 8 characters' : 'Enter password'}
+                    placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    className={`${INPUT_CLASS} h-9 pr-9`}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
+                    onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-400 transition hover:text-neutral-700"
+                    className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                   >
                     {showPassword ? (
                       <IconEyeOff className="h-4 w-4" />
@@ -197,10 +213,11 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
                 </div>
               </div>
 
-              <button
+              <Button
                 type="submit"
-                disabled={loading}
-                className="flex h-9 w-full items-center justify-center rounded-lg bg-neutral-900 px-4 text-xs font-semibold text-white shadow-xs transition duration-150 hover:bg-neutral-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55"
+                variant="primary"
+                loading={loading}
+                className="h-9 w-full text-[13px]"
               >
                 {loading
                   ? mode === 'login'
@@ -209,10 +226,10 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
                   : mode === 'login'
                     ? 'Sign in'
                     : 'Create account'}
-              </button>
+              </Button>
             </form>
 
-            <div className="mt-6 border-t border-neutral-100 pt-4 text-center text-xs text-neutral-500">
+            <div className="mt-5 border-t border-[var(--border-default)] pt-4 text-center text-[12px] text-[var(--text-secondary)]">
               {mode === 'login' ? (
                 <>
                   Need an account?{' '}
@@ -222,7 +239,7 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
                       setMode('register');
                       setError(null);
                     }}
-                    className="font-semibold text-blue-600 hover:text-blue-700"
+                    className="font-medium text-[var(--accent-text)] hover:underline"
                   >
                     Create one
                   </button>
@@ -236,7 +253,7 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
                       setMode('login');
                       setError(null);
                     }}
-                    className="font-semibold text-blue-600 hover:text-blue-700"
+                    className="font-medium text-[var(--accent-text)] hover:underline"
                   >
                     Sign in
                   </button>

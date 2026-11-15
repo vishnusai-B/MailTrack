@@ -1,19 +1,13 @@
-
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { CampaignStatus, PaginatedCampaignsResponse } from '@mailtrack/shared';
+import type { CampaignStatus, PaginatedCampaignsResponse, TrackedEmail } from '@mailtrack/shared';
 import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
-import {
-  IconArrowUpRight,
-  IconDownload,
-  IconFolder,
-  IconPlus,
-  IconSearch,
-} from '../components/Icons.js';
+import { IconDownload, IconPlus, IconSearch } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
 import { CampaignStatusBadge } from '../components/StatusBadge.js';
 import { Button } from '../components/ui/Button.js';
 import { INPUT_CLASS, SELECT_CLASS, SurfaceCard } from '../components/ui/Card.js';
+import { ModalDialog } from '../components/ui/Dialog.js';
 import { PaginationBar } from '../components/ui/Pagination.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
@@ -25,9 +19,9 @@ interface CampaignsPageProps {
 
 const STATUS_OPTIONS: Array<{ value: CampaignStatus | ''; label: string }> = [
   { value: '', label: 'All statuses' },
-  { value: 'ACTIVE', label: 'ACTIVE' },
-  { value: 'COMPLETED', label: 'COMPLETED' },
-  { value: 'ARCHIVED', label: 'ARCHIVED' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'ARCHIVED', label: 'Archived' },
 ];
 
 export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps) {
@@ -39,12 +33,16 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
   const [data, setData] = useState<PaginatedCampaignsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
+  // Create-campaign modal state
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [availableEmails, setAvailableEmails] = useState<TrackedEmail[]>([]);
+  const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
-  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -84,22 +82,54 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
     return () => controller.abort();
   }, [loadCampaigns]);
 
+  function openCreateModal() {
+    setNewName('');
+    setNewDescription('');
+    setNameError(null);
+    setSelectedEmailIds(new Set());
+    setShowCreate(true);
+
+    apiClient
+      .listTrackedEmails({ page: 1, limit: 20 })
+      .then((res) => setAvailableEmails(Array.isArray(res?.items) ? res.items : []))
+      .catch(() => setAvailableEmails([]));
+  }
+
+  function toggleEmailSelection(id: string) {
+    setSelectedEmailIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim()) {
+      setNameError('Enter a campaign name.');
+      return;
+    }
+    setNameError(null);
     setCreating(true);
     try {
       const created = await apiClient.createCampaign({
         name: newName.trim(),
         description: newDescription.trim() || undefined,
       });
+
+      const emailIds = Array.from(selectedEmailIds);
+      if (emailIds.length > 0) {
+        await Promise.all(
+          emailIds.map((emailId) => apiClient.assignEmailCampaign(emailId, created.id)),
+        );
+      }
+
       onNotify('success', `Campaign "${created.name}" created.`);
-      setNewName('');
-      setNewDescription('');
       setShowCreate(false);
       loadCampaigns();
-    } catch (err) {
-      onNotify('error', err instanceof ApiError ? err.message : 'Failed to create campaign.');
+    } catch (err: unknown) {
+      onNotify('error', err instanceof ApiError ? err.message : 'Unable to create campaign.');
     } finally {
       setCreating(false);
     }
@@ -110,137 +140,68 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
     try {
       await apiClient.downloadCsv(
         '/api/exports/campaigns',
-        { search: appliedSearch || undefined, status: status || undefined },
-        'mailtrack-campaigns.csv',
+        { status: status || undefined },
+        'campaigns.csv',
       );
-      onNotify('success', 'Campaigns CSV exported.');
-    } catch (err) {
-      onNotify('error', err instanceof ApiError ? err.message : 'Failed to export campaigns.');
+      onNotify('success', 'Exported campaigns CSV.');
+    } catch (err: unknown) {
+      onNotify('error', err instanceof ApiError ? err.message : 'Unable to export campaigns.');
     } finally {
       setExporting(false);
     }
   }
 
+  const hasFilters = Boolean(appliedSearch || status);
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-neutral-500">
-          Organize tracked emails into campaigns for grouped metrics and follow-ups.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" disabled={exporting} onClick={() => void handleExportCsv()}>
-            <IconDownload className="h-3.5 w-3.5" />
-            {exporting ? 'Exporting...' : 'Export CSV'}
-          </Button>
-          <Button variant="primary" onClick={() => setShowCreate((v) => !v)}>
-            {!showCreate ? <IconPlus className="h-3.5 w-3.5" /> : null}
-            {showCreate ? 'Cancel' : 'New Campaign'}
-          </Button>
-        </div>
-      </div>
-
-      {showCreate ? (
-        <SurfaceCard className="border-blue-200/80 p-5">
-          <form onSubmit={(e) => void handleCreate(e)}>
-            <h2 className="text-sm font-semibold text-neutral-900">Create Campaign</h2>
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="campaign-name"
-                  className="block text-xs font-medium text-neutral-700"
-                >
-                  Campaign Name
-                </label>
-                <input
-                  id="campaign-name"
-                  type="text"
-                  required
-                  maxLength={120}
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Q4 Enterprise Outreach"
-                  className={`${INPUT_CLASS} mt-1`}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="campaign-desc"
-                  className="block text-xs font-medium text-neutral-700"
-                >
-                  Description (optional)
-                </label>
-                <input
-                  id="campaign-desc"
-                  type="text"
-                  maxLength={500}
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Short note about this group"
-                  className={`${INPUT_CLASS} mt-1`}
-                />
-              </div>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={creating}>
-                {creating ? 'Creating...' : 'Create Campaign'}
-              </Button>
-            </div>
-          </form>
-        </SurfaceCard>
-      ) : null}
-
+    <div className="space-y-4">
       <SurfaceCard className="p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="sm:col-span-2">
-            <label
-              htmlFor="campaigns-search"
-              className="block text-xs font-medium text-neutral-600"
-            >
-              Search campaigns
-            </label>
-            <div className="relative mt-1">
-              <IconSearch className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-neutral-400" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+              <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
-                id="campaigns-search"
                 type="search"
+                aria-label="Search campaigns"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by name or description..."
-                className={`${INPUT_CLASS} pl-9`}
+                placeholder="Search campaigns..."
+                className={`${INPUT_CLASS} pl-8`}
               />
             </div>
-          </div>
-          <div>
-            <label
-              htmlFor="campaigns-status"
-              className="block text-xs font-medium text-neutral-600"
-            >
-              Status
-            </label>
+
             <select
-              id="campaigns-status"
+              aria-label="Campaign status"
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value as CampaignStatus | '');
                 setPage(1);
               }}
-              className={`${SELECT_CLASS} mt-1`}
+              className={SELECT_CLASS}
             >
               {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.label} value={opt.value}>
+                <option key={opt.value || 'all'} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
             </select>
           </div>
+
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" loading={exporting} onClick={handleExportCsv}>
+              <IconDownload className="h-3.5 w-3.5" />
+              Export CSV
+            </Button>
+            <Button variant="primary" onClick={openCreateModal}>
+              <IconPlus className="h-3.5 w-3.5" />
+              New Campaign
+            </Button>
+          </div>
         </div>
       </SurfaceCard>
 
       {loading ? (
-        <TableSkeleton rows={5} cols={4} />
+        <TableSkeleton rows={5} />
       ) : error ? (
         <ErrorState
           title="Unable to load campaigns"
@@ -249,77 +210,200 @@ export function CampaignsPage({ onSelectCampaign, onNotify }: CampaignsPageProps
         />
       ) : !data || data.items.length === 0 ? (
         <EmptyState
-          title="No campaigns found"
+          title={hasFilters ? 'No matching campaigns' : 'No campaigns yet'}
           description={
-            appliedSearch || status
-              ? 'No campaigns match your current filters.'
-              : 'Create a campaign to group tracked emails and monitor them together.'
+            hasFilters
+              ? 'No campaigns match your current search or status filter.'
+              : 'Group related outreach emails into a campaign to track combined activity and follow-ups.'
           }
           action={
-            !showCreate ? (
-              <Button variant="primary" onClick={() => setShowCreate(true)}>
+            hasFilters ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setSearchInput('');
+                  setAppliedSearch('');
+                  setStatus('');
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : (
+              <Button size="sm" variant="primary" onClick={openCreateModal}>
                 <IconPlus className="h-3.5 w-3.5" />
                 New Campaign
               </Button>
-            ) : undefined
+            )
           }
         />
       ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {data.items.map((campaign) => (
-              <article
-                key={campaign.id}
-                className="group flex flex-col justify-between rounded-xl border border-neutral-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition duration-150 hover:border-neutral-300"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-600">
-                        <IconFolder className="h-3.5 w-3.5" />
-                      </span>
-                      <h3 className="truncate text-sm font-semibold text-neutral-900">
-                        {campaign.name}
-                      </h3>
-                    </div>
-                    <CampaignStatusBadge status={campaign.status} />
-                  </div>
-                  <p className="mt-2.5 line-clamp-2 text-xs leading-relaxed text-neutral-500">
-                    {campaign.description || 'No description'}
-                  </p>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3 text-xs text-neutral-500">
-                  <div className="tabular-nums">
-                    <span className="font-semibold text-neutral-900">
-                      {campaign.emailCount ?? 0}
-                    </span>{' '}
-                    {campaign.emailCount === 1 ? 'email' : 'emails'} ·{' '}
-                    {formatDateTime(campaign.createdAt)}
-                  </div>
-                  <button
-                    type="button"
+        <SurfaceCard className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-left text-[13px]">
+              <thead className="border-b border-[var(--border-default)] bg-[var(--bg-subtle)] text-[12px] font-medium text-[var(--text-secondary)]">
+                <tr>
+                  <th className="px-4 py-2.5">Campaign</th>
+                  <th className="px-4 py-2.5">Emails</th>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Created</th>
+                  <th className="px-4 py-2.5 text-right">
+                    <span className="sr-only">Open</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-default)]">
+                {data.items.map((campaign) => (
+                  <tr
+                    key={campaign.id}
                     onClick={() => onSelectCampaign(campaign.id)}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-700"
+                    className="cursor-pointer transition-colors duration-150 hover:bg-[var(--bg-subtle)]"
                   >
-                    Open
-                    <IconArrowUpRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </article>
-            ))}
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[var(--text-primary)]">{campaign.name}</div>
+                      {campaign.description ? (
+                        <div className="mt-0.5 line-clamp-1 text-[12px] text-[var(--text-muted)]">
+                          {campaign.description}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text-secondary)] tabular-nums">
+                      {campaign.emailCount ?? 0}
+                    </td>
+                    <td className="px-4 py-3">
+                      <CampaignStatusBadge status={campaign.status} />
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-[var(--text-muted)] tabular-nums">
+                      {formatDateTime(campaign.createdAt)}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-right"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onSelectCampaign(campaign.id)}
+                      >
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <SurfaceCard className="overflow-hidden">
-            <PaginationBar
-              page={data.page}
-              totalPages={data.totalPages}
-              total={data.total}
-              onPageChange={setPage}
-            />
-          </SurfaceCard>
-        </div>
+          <PaginationBar
+            page={data.page}
+            totalPages={data.totalPages}
+            totalItems={data.total}
+            itemLabel="campaigns"
+            onPageChange={setPage}
+          />
+        </SurfaceCard>
       )}
+
+      {/* Create Campaign Modal */}
+      <ModalDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="New campaign"
+        description="Group tracked emails together to monitor outreach performance."
+        maxWidthClass="max-w-lg"
+      >
+        <form onSubmit={handleCreate} className="space-y-4" noValidate>
+          <div>
+            <label
+              htmlFor="campaign-name-input"
+              className="block text-[12px] font-medium text-[var(--text-secondary)]"
+            >
+              Name
+            </label>
+            <input
+              id="campaign-name-input"
+              type="text"
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
+              placeholder="Q4 Enterprise Outreach"
+              maxLength={120}
+              className={`${INPUT_CLASS} mt-1.5`}
+            />
+            {nameError ? (
+              <p className="mt-1 text-[12px] text-[var(--status-danger-text)]">{nameError}</p>
+            ) : null}
+          </div>
+
+          <div>
+            <label
+              htmlFor="campaign-desc-input"
+              className="block text-[12px] font-medium text-[var(--text-secondary)]"
+            >
+              Description (optional)
+            </label>
+            <textarea
+              id="campaign-desc-input"
+              rows={2}
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Decision makers contacted in Q4"
+              maxLength={500}
+              className="mt-1.5 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] px-2.5 py-2 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+
+          {availableEmails.length > 0 ? (
+            <div>
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="font-medium text-[var(--text-secondary)]">
+                  Add existing emails (optional)
+                </span>
+                {selectedEmailIds.size > 0 ? (
+                  <span className="text-[var(--text-muted)] tabular-nums">
+                    {selectedEmailIds.size} selected
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-1.5 max-h-40 divide-y divide-[var(--border-default)] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-default)]">
+                {availableEmails.map((email) => (
+                  <label
+                    key={email.id}
+                    className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[12px] hover:bg-[var(--bg-subtle)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEmailIds.has(email.id)}
+                      onChange={() => toggleEmailSelection(email.id)}
+                      className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-[var(--accent)]"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[var(--text-primary)]">
+                      {email.subject || 'No subject'}
+                    </span>
+                    <span className="max-w-[160px] truncate text-[var(--text-muted)]">
+                      {email.recipientReference}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={creating}>
+              {creating ? 'Creating...' : 'Create campaign'}
+            </Button>
+          </div>
+        </form>
+      </ModalDialog>
     </div>
   );
 }

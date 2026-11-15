@@ -1,46 +1,73 @@
-import { IconChevronLeft, IconChevronRight } from '../Icons.js';
+import { Button } from './Button.js';
+import { SELECT_CLASS } from './Card.js';
 
 interface PaginationBarProps {
   page: number;
   totalPages: number;
-  total: number;
-  unitLabel?: string;
+  totalItems: number;
+  itemLabel?: string;
+  pageSize?: number;
+  onPageSizeChange?: (nextSize: number) => void;
   onPageChange: (nextPage: number) => void;
 }
+
+const PAGE_SIZES = [15, 25, 50];
 
 export function PaginationBar({
   page,
   totalPages,
-  total,
-  unitLabel = 'total',
+  totalItems,
+  itemLabel = 'items',
+  pageSize,
+  onPageSizeChange,
   onPageChange,
 }: PaginationBarProps) {
+  const safeTotalPages = Math.max(totalPages, 1);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 bg-neutral-50/60 px-5 py-3 text-xs text-neutral-500">
-      <div>
-        Showing page <span className="font-semibold text-neutral-900 tabular-nums">{page}</span> of{' '}
-        <span className="font-semibold text-neutral-900 tabular-nums">{totalPages}</span> (
-        <span className="tabular-nums">{total}</span> {unitLabel})
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-default)] px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-3 text-[12px] text-[var(--text-muted)] tabular-nums">
+        <span>
+          Showing page <span className="font-medium text-[var(--text-primary)]">{page}</span> of{' '}
+          <span className="font-medium text-[var(--text-primary)]">{safeTotalPages}</span> (
+          {totalItems} {itemLabel})
+        </span>
+        {pageSize !== undefined && onPageSizeChange ? (
+          <label className="inline-flex items-center gap-1.5">
+            <span>Rows</span>
+            <select
+              aria-label="Rows per page"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className={`${SELECT_CLASS} h-7 px-2 text-[12px]`}
+            >
+              {PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
+
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
+        <Button
+          size="sm"
+          variant="secondary"
           disabled={page <= 1}
           onClick={() => onPageChange(Math.max(1, page - 1))}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-700 shadow-2xs transition hover:bg-neutral-50 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-45"
         >
-          <IconChevronLeft className="h-3.5 w-3.5" />
           Previous
-        </button>
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-          className="inline-flex h-8 items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-700 shadow-2xs transition hover:bg-neutral-50 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-45"
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={page >= safeTotalPages}
+          onClick={() => onPageChange(page + 1)}
         >
           Next
-          <IconChevronRight className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     </div>
   );

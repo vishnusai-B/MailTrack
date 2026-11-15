@@ -40,6 +40,27 @@ const MOCK_ANALYTICS: DashboardAnalyticsResponse = {
     SUSPECTED_SCANNER: 1,
     totalEvents: 8,
   },
+  classificationBreakdown: {
+    RECORDED: 5,
+    LIKELY_PROXY: 2,
+    SUSPECTED_SCANNER: 1,
+    totalEvents: 8,
+  },
+  totalDispatchedEmails: 4,
+  emailsWithPixelActivity: 3,
+  emailsWithRecordedActivity: 2,
+  emailsWithLikelyProxyActivity: 1,
+  emailsWithSuspectedScannerActivity: 1,
+  totalPixelRequests: 8,
+  pixelActivityHeatmap: [
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 2, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+  ],
   dailyActivity: [
     {
       date: '2026-11-13',
@@ -252,15 +273,15 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     const text = container.textContent ?? '';
-    expect(text).toContain('Total Tracked Emails');
-    expect(text).toContain('10');
-    expect(text).toContain('Pending');
-    expect(text).toContain('Dispatched');
-    expect(text).toContain('Failed');
-    expect(text).toContain('Expired');
-    expect(text).toContain('Pixel requests, not unique opens');
-    expect(text).not.toContain('confirmed SENT');
+    expect(text).toContain('Emails sent');
+    expect(text).toContain('4');
+    expect(text).toContain('10 tracked (30d)');
+    expect(text).toContain('Emails with pixel activity');
+    expect(text).toContain('Estimated engagement rate');
+    expect(text).toContain('50%');
+    expect(text).toContain('1 email failed to send · 2 pending · 3 expired');
     expect(text).toContain('Q4 Partnership Deck');
+    expect(text).not.toContain('API ok');
   });
 
   it('shows loading skeleton, empty state, and API error state on overview', async () => {
@@ -271,20 +292,37 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
       resolveAnalytics = resolve;
     });
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/health')) {
+        return jsonResponse({
           status: 'ok',
           service: 'mailtrack-server',
           timestamp: '2026-11-14T10:00:00.000Z',
           uptimeSeconds: 10,
           database: 'connected',
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ user: MOCK_USER }))
-      .mockReturnValueOnce(pendingAnalytics)
-      .mockResolvedValueOnce(jsonResponse({ error: 'Database timeout' }, 500));
+        });
+      }
+      if (url.endsWith('/api/auth/me')) {
+        return jsonResponse({ user: MOCK_USER });
+      }
+      if (url.includes('/api/tracking/analytics')) {
+        if (
+          fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/tracking/analytics'))
+            .length === 1
+        ) {
+          return pendingAnalytics;
+        }
+        return jsonResponse({ error: 'Database timeout' }, 500);
+      }
+      if (url.includes('/api/tracking/emails')) {
+        return jsonResponse({ items: [], total: 0, page: 1, limit: 100, totalPages: 1 });
+      }
+      if (url.includes('/api/reminders')) {
+        return jsonResponse({ items: [], total: 0, page: 1, limit: 1, totalPages: 1 });
+      }
+      return jsonResponse({}, 404);
+    });
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -421,8 +459,8 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     // Navigate to Tracked Emails
-    const emailsNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Tracked Emails',
+    const emailsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Tracked Emails'),
     )!;
     await act(async () => {
       emailsNav.click();
@@ -430,7 +468,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     expect(container.textContent).toContain('partner@acme.com');
-    expect(container.textContent).toContain('Opened');
+    expect(container.textContent).toContain('3 likely opens');
     expect(container.textContent).toContain('Showing page 1 of 2');
 
     // Click Next page
@@ -446,7 +484,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     expect(container.textContent).toContain('Showing page 2 of 2');
 
     // Filter by status
-    const statusSelect = container.querySelector('#emails-status') as HTMLSelectElement;
+    const statusSelect = container.querySelector('#email-status-filter') as HTMLSelectElement;
     await act(async () => {
       statusSelect.value = 'DISPATCHED';
       statusSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -455,34 +493,40 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
 
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes('status=DISPATCHED'))).toBe(true);
 
-    // Open Email Detail
-    const viewDetailsBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('View details'),
-    )!;
+    // Click table row to open Email Detail Drawer
+    const emailRow = container.querySelector('tbody tr') as HTMLTableRowElement;
     await act(async () => {
-      viewDetailsBtn.click();
+      emailRow.click();
     });
     await flush();
 
     const detailText = container.textContent ?? '';
     expect(detailText).toContain('Q4 Partnership Deck');
-    expect(detailText).toContain('Opened');
-    expect(detailText).toContain('RECORDED');
-    expect(detailText).toContain('LIKELY_PROXY');
-    expect(detailText).toContain('SUSPECTED_SCANNER');
-    expect(detailText).toContain('do not establish whether a human read the email');
+    expect(detailText).toContain('Opened (likely human)');
+    expect(detailText).toContain('Email client prefetch');
+    expect(detailText).toContain('Security scanner');
+    expect(detailText).toContain('How we classify opens');
     expect(detailText).not.toContain('sha256-hidden-hash-value');
 
+    // Close drawer
+    const closeDrawerBtn = container.querySelector(
+      'button[aria-label="Close email details"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      closeDrawerBtn.click();
+    });
+    await flush();
+
     // Navigate to Activity page
-    const activityNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Activity',
+    const activityNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Activity'),
     )!;
     await act(async () => {
       activityNav.click();
     });
     await flush();
 
-    expect(container.textContent).toContain('SUSPECTED_SCANNER');
+    expect(container.textContent).toContain('Opened (likely human)');
     expect(container.textContent).toContain('not counted as unique human opens');
   });
 
@@ -505,15 +549,17 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
       }
       if (url.includes('/api/tracking/analytics')) {
         if (url.includes('days=7')) {
+          const breakdown7d = {
+            RECORDED: 3,
+            LIKELY_PROXY: 1,
+            SUSPECTED_SCANNER: 0,
+            totalEvents: 4,
+          };
           return jsonResponse({
             ...MOCK_ANALYTICS,
             rangeDays: 7,
-            classificationCounts: {
-              RECORDED: 3,
-              LIKELY_PROXY: 1,
-              SUSPECTED_SCANNER: 0,
-              totalEvents: 4,
-            },
+            classificationCounts: breakdown7d,
+            classificationBreakdown: breakdown7d,
           });
         }
         return jsonResponse(MOCK_ANALYTICS);
@@ -540,8 +586,8 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     // 1. Analytics page: charts + classification distribution + date range filter
-    const analyticsNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Analytics',
+    const analyticsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Analytics'),
     )!;
     await act(async () => {
       analyticsNav.click();
@@ -549,10 +595,11 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     const analyticsText = container.textContent ?? '';
-    expect(analyticsText).toContain('Recorded Pixel Requests Over Time (30d)');
-    expect(analyticsText).toContain('Tracking Status Distribution');
-    expect(analyticsText).toContain('Event Classification Distribution');
-    expect(analyticsText).toContain('Daily Activity Trend by Classification');
+    expect(analyticsText).toContain('Activity by signal type');
+    expect(analyticsText).toContain('Classification breakdown');
+    expect(analyticsText).toContain('Recent pixel-request activity');
+    expect(analyticsText).toContain('Estimated engagement rate');
+    expect(analyticsText).toContain('Automated traffic share');
     expect(analyticsText).toContain('5 (63%)'); // 5/8 RECORDED
 
     const rangeSelect = container.querySelector('#analytics-range') as HTMLSelectElement;
@@ -565,11 +612,13 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     expect(
       fetchMock.mock.calls.some(([u]) => String(u).includes('/api/tracking/analytics?days=7')),
     ).toBe(true);
-    expect(container.textContent).toContain('Recorded Pixel Requests Over Time (7d)');
+    expect(container.textContent).toContain(
+      '3 likely human signals vs 1 automated fetches over 7 days (dates in UTC).',
+    );
 
-    // 2. Settings page
-    const settingsNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Settings',
+    // 2. Settings page (no internal service/db status exposed)
+    const settingsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Settings'),
     )!;
     await act(async () => {
       settingsNav.click();
@@ -577,23 +626,24 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     const settingsText = container.textContent ?? '';
-    expect(settingsText).toContain('Account Profile');
+    expect(settingsText).toContain('Profile');
     expect(settingsText).toContain('alex@mailtrack.dev');
-    expect(settingsText).toContain('Enabled by default');
-    expect(settingsText).toContain('Backend Connectivity');
-    expect(settingsText).toContain('mailtrack-server');
+    expect(settingsText).toContain('Disabled by default');
+    expect(settingsText).toContain('Chrome extension');
+    expect(settingsText).toContain('Data and privacy');
+    expect(settingsText).not.toContain('mailtrack-server');
 
     // 3. Tracked Emails search + date filter
-    const emailsNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Tracked Emails',
+    const emailsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Tracked Emails'),
     )!;
     await act(async () => {
       emailsNav.click();
     });
     await flush();
 
-    const searchInput = container.querySelector('#emails-search') as HTMLInputElement;
-    const fromInput = container.querySelector('#emails-from') as HTMLInputElement;
+    const searchInput = container.querySelector('#email-search') as HTMLInputElement;
+    const fromInput = container.querySelector('input[aria-label="From date"]') as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
       setter.call(searchInput, 'partner');
@@ -612,15 +662,17 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     ).toBe(true);
 
     // 4. Activity date filter
-    const activityNav = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Activity',
+    const activityNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Activity'),
     )!;
     await act(async () => {
       activityNav.click();
     });
     await flush();
 
-    const activityFrom = container.querySelector('#activity-from') as HTMLInputElement;
+    const activityFrom = container.querySelector(
+      'input[aria-label="From date"]',
+    ) as HTMLInputElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
       setter.call(activityFrom, '2026-11-10');
@@ -631,7 +683,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     expect(
       fetchMock.mock.calls.some(([u]) =>
         String(u).includes(
-          '/api/tracking/events?page=1&limit=20&from=2026-11-10T00%3A00%3A00.000Z',
+          '/api/tracking/events?page=1&limit=20&classification=RECORDED&from=2026-11-10T00%3A00%3A00.000Z',
         ),
       ),
     ).toBe(true);
@@ -660,6 +712,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
           recentEvents: [
             {
               ...MOCK_ANALYTICS.recentEvents[0]!,
+              trackedEmailId: 'trk-forbidden',
               trackedEmail: {
                 id: 'trk-forbidden',
                 subject: 'Restricted',
@@ -743,7 +796,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
 
     expect(window.localStorage.getItem('mailtrack_access_token')).toBe('fresh-jwt');
     expect(window.localStorage.getItem('mailtrack_refresh_token')).toBe('rotated-refresh-2');
-    expect(container.textContent).toContain('Total Tracked Emails');
+    expect(container.textContent).toContain('Emails sent');
 
     // Sign out and test 429 on login
     const signOutBtn = Array.from(container.querySelectorAll('button')).find((b) =>
@@ -960,7 +1013,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     });
     await flush();
 
-    const nameInput = container.querySelector('#campaign-name') as HTMLInputElement;
+    const nameInput = container.querySelector('#campaign-name-input') as HTMLInputElement;
     expect(nameInput).toBeTruthy();
 
     await act(async () => {
@@ -987,7 +1040,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     expect(container.textContent).toContain('Campaign Details');
-    expect(container.textContent).toContain('they do not establish unique human opens');
+    expect(container.textContent).toContain('not guaranteed unique human opens');
 
     const archiveBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent?.trim() === 'Archive',
@@ -1008,7 +1061,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     expect(archived).toBe(true);
-    expect(container.textContent).toContain('ARCHIVED');
+    expect(container.textContent).toContain('Archived');
   });
 
   it('lists and completes follow-up reminders in the Reminders section', async () => {
@@ -1102,7 +1155,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     expect(completed).toBe(true);
-    expect(container.textContent).toContain('COMPLETED');
+    expect(container.textContent).toContain('Completed');
   });
 
   it('triggers CSV export download from Tracked Emails page', async () => {
@@ -1185,5 +1238,157 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     expect(() => resolveApiBaseUrl(undefined, true)).toThrow(/VITE_API_URL is required/);
     expect(() => resolveApiBaseUrl('http://localhost:4000', true)).toThrow(/non-localhost HTTPS/);
     expect(() => resolveApiBaseUrl('http://api.example.com', true)).toThrow(/non-localhost HTTPS/);
+  });
+
+  it('uses backend emailSummary for >100 tracked emails on Overview and Analytics without listTrackedEmails cap', async () => {
+    window.localStorage.setItem('mailtrack_access_token', 'jwt-valid');
+
+    const largeAnalytics: DashboardAnalyticsResponse = {
+      ...MOCK_ANALYTICS,
+      statusCounts: {
+        PENDING: 0,
+        DISPATCHED: 150,
+        SENT: 0,
+        FAILED: 0,
+        EXPIRED: 0,
+        totalEmails: 150,
+      },
+      totalDispatchedEmails: 150,
+      emailsWithPixelActivity: 130,
+      emailsWithRecordedActivity: 120,
+      emailsWithLikelyProxyActivity: 5,
+      emailsWithSuspectedScannerActivity: 5,
+      totalPixelRequests: 140,
+    };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/health')) {
+        return jsonResponse({
+          status: 'ok',
+          service: 'mailtrack-server',
+          timestamp: '2026-11-14T10:00:00.000Z',
+          uptimeSeconds: 42,
+          database: 'connected',
+        });
+      }
+      if (url.endsWith('/api/auth/me')) {
+        return jsonResponse({ user: MOCK_USER });
+      }
+      if (url.includes('/api/tracking/analytics')) {
+        return jsonResponse(largeAnalytics);
+      }
+      if (url.includes('/api/reminders')) {
+        return jsonResponse({ items: [], total: 0, page: 1, limit: 1, totalPages: 1 });
+      }
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flush();
+
+    const overviewText = container.textContent ?? '';
+    expect(overviewText).toContain('150');
+    expect(overviewText).toContain('130');
+    expect(overviewText).toContain('80%');
+    expect(overviewText).toContain('120 emails with likely human signals (30d)');
+
+    // Neither Overview nor Analytics should call listTrackedEmails for aggregate metrics
+    const analyticsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Analytics'),
+    )!;
+    await act(async () => {
+      analyticsNav.click();
+    });
+    await flush();
+
+    const analyticsText = container.textContent ?? '';
+    expect(analyticsText).toContain('150');
+    expect(analyticsText).toContain('130');
+    expect(analyticsText).toContain('80%');
+    expect(analyticsText).toContain(
+      'Pixel requests can be generated by proxies, scanners, caching, or repeated loads; a recorded pixel event does not prove a person read the email.',
+    );
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/tracking/emails'))).toBe(
+      false,
+    );
+  });
+
+  it('renders 0% estimated engagement rate when totalDispatchedEmails is zero', async () => {
+    window.localStorage.setItem('mailtrack_access_token', 'jwt-valid');
+
+    const zeroAnalytics: DashboardAnalyticsResponse = {
+      ...MOCK_ANALYTICS,
+      totalDispatchedEmails: 0,
+      emailsWithPixelActivity: 0,
+      emailsWithRecordedActivity: 0,
+      emailsWithLikelyProxyActivity: 0,
+      emailsWithSuspectedScannerActivity: 0,
+      totalPixelRequests: 0,
+      statusCounts: {
+        PENDING: 1,
+        DISPATCHED: 0,
+        SENT: 0,
+        FAILED: 0,
+        EXPIRED: 0,
+        totalEmails: 1,
+      },
+      classificationCounts: {
+        RECORDED: 0,
+        LIKELY_PROXY: 0,
+        SUSPECTED_SCANNER: 0,
+        totalEvents: 0,
+      },
+      classificationBreakdown: {
+        RECORDED: 0,
+        LIKELY_PROXY: 0,
+        SUSPECTED_SCANNER: 0,
+        totalEvents: 0,
+      },
+    };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/health')) {
+        return jsonResponse({
+          status: 'ok',
+          service: 'mailtrack-server',
+          timestamp: '2026-11-14T10:00:00.000Z',
+          uptimeSeconds: 42,
+          database: 'connected',
+        });
+      }
+      if (url.endsWith('/api/auth/me')) {
+        return jsonResponse({ user: MOCK_USER });
+      }
+      if (url.includes('/api/tracking/analytics')) {
+        return jsonResponse(zeroAnalytics);
+      }
+      if (url.includes('/api/reminders')) {
+        return jsonResponse({ items: [], total: 0, page: 1, limit: 1, totalPages: 1 });
+      }
+      return jsonResponse({}, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flush();
+
+    expect(container.textContent).toContain('0%');
+
+    const analyticsNav = Array.from(container.querySelectorAll('nav button')).find((b) =>
+      b.textContent?.includes('Analytics'),
+    )!;
+    await act(async () => {
+      analyticsNav.click();
+    });
+    await flush();
+
+    expect(container.textContent).toContain('0%');
   });
 });
