@@ -8,55 +8,71 @@ import { formatShortDate } from '../lib/format.js';
 export function DailyActivityChart({
   data,
   title = 'Daily Recorded Pixel Requests',
-  subtitle = 'Total pixel requests recorded per UTC day (includes repeated, proxy, and scanner requests).',
+  subtitle = 'Pixel requests logged per day (UTC).',
 }: {
   data: DailyActivityPoint[];
   title?: string;
   subtitle?: string;
 }) {
   const hasEvents = data.some((d) => d.totalEvents > 0);
+  const totalEvents = data.reduce((sum, d) => sum + d.totalEvents, 0);
   const maxCount = Math.max(1, ...data.map((d) => d.totalEvents));
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
           <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
         </div>
+        {hasEvents ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 tabular-nums">
+            {totalEvents} total
+          </span>
+        ) : null}
       </div>
 
       {!hasEvents ? (
-        <div className="mt-6 flex h-44 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500">
+        <div className="mt-6 flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500">
           No pixel requests recorded in this date range.
         </div>
       ) : (
         <div className="mt-6">
-          <div
-            className="flex h-44 items-end gap-1.5 border-b border-slate-200 pb-2"
-            role="img"
-            aria-label={title}
-          >
-            {data.map((point) => {
-              const heightPct = Math.max(
-                point.totalEvents > 0 ? 6 : 0,
-                Math.round((point.totalEvents / maxCount) * 100),
-              );
-              return (
-                <div
-                  key={point.date}
-                  className="group relative flex h-full flex-1 flex-col items-center justify-end"
-                >
+          <div className="relative">
+            <div
+              className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-2"
+              aria-hidden="true"
+            >
+              <div className="border-b border-dashed border-slate-100" />
+              <div className="border-b border-dashed border-slate-100" />
+              <div className="border-b border-dashed border-slate-100" />
+            </div>
+            <div
+              className="relative flex h-44 items-end gap-1.5 border-b border-slate-200 pb-2"
+              role="img"
+              aria-label={title}
+            >
+              {data.map((point) => {
+                const heightPct = Math.max(
+                  point.totalEvents > 0 ? 6 : 0,
+                  Math.round((point.totalEvents / maxCount) * 100),
+                );
+                return (
                   <div
-                    className="w-full max-w-[28px] rounded-t bg-blue-600 transition-colors group-hover:bg-blue-700"
-                    style={{ height: `${heightPct}%` }}
-                    title={`${formatShortDate(point.date)}: ${point.totalEvents} recorded requests`}
-                  />
-                </div>
-              );
-            })}
+                    key={point.date}
+                    className="group relative flex h-full flex-1 flex-col items-center justify-end"
+                  >
+                    <div
+                      className="w-full max-w-[32px] rounded-t-md bg-blue-600/90 transition-colors duration-150 group-hover:bg-blue-700"
+                      style={{ height: `${heightPct}%` }}
+                      title={`${formatShortDate(point.date)}: ${point.totalEvents} recorded requests`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+          <div className="mt-2.5 flex justify-between text-[11px] text-slate-400">
             <span>{data[0] ? formatShortDate(data[0].date) : ''}</span>
             <span>
               {data.length > 2 ? formatShortDate(data[Math.floor(data.length / 2)]!.date) : ''}
@@ -86,12 +102,11 @@ export function StatusDistributionChart({ counts }: { counts: TrackingStatusCoun
   const total = counts.totalEmails;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
       <div>
         <h2 className="text-sm font-semibold text-slate-900">Tracking Status Distribution</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Lifecycle breakdown across {total} tracked {total === 1 ? 'email' : 'emails'}. SENT
-          requires trusted server-side confirmation.
+          Breakdown across {total} tracked {total === 1 ? 'email' : 'emails'}.
         </p>
       </div>
 
@@ -176,12 +191,11 @@ export function ClassificationDistributionChart({ counts }: { counts: EventClass
   });
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
       <div>
         <h2 className="text-sm font-semibold text-slate-900">Event Classification Distribution</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Request characteristics across {total} recorded {total === 1 ? 'event' : 'events'}. Does
-          not confirm human reading.
+          Breakdown across {total} recorded {total === 1 ? 'event' : 'events'}.
         </p>
       </div>
 
@@ -244,14 +258,14 @@ export function DailyTrendByClassificationChart({ data }: { data: DailyActivityP
   const maxCount = Math.max(1, ...data.map((d) => d.totalEvents));
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
+    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">
             Daily Activity Trend by Classification
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Stacked daily pixel requests segmented by request classification.
+            Daily pixel requests split by classification.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">

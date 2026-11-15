@@ -8,7 +8,10 @@ interface ErrorStateProps {
 
 export function ErrorState({ title = 'Unable to load data', message, onRetry }: ErrorStateProps) {
   return (
-    <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50/70 p-6 text-rose-900">
+    <div
+      role="alert"
+      className="rounded-2xl border border-rose-200/90 bg-rose-50/70 p-6 text-rose-900"
+    >
       <div className="flex items-start gap-3">
         <IconAlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
         <div className="flex-1">

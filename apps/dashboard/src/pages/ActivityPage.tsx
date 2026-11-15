@@ -100,13 +100,13 @@ export function ActivityPage({ onSelectEmail, onNotify }: ActivityPageProps) {
     <div className="space-y-5">
       <div
         role="note"
-        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-xs"
+        className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-xs text-slate-500 shadow-xs"
       >
-        Each row represents an individual pixel HTTP request. Duplicate pixel requests are listed as
-        separate events and are <strong>not</strong> counted as unique human opens.
+        Each row logs a pixel request. Repeated requests are listed individually and are{' '}
+        <strong className="font-medium text-slate-700">not</strong> counted as unique human opens.
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label

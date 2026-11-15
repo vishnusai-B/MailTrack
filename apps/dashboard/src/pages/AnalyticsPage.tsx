@@ -47,10 +47,9 @@ export function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3.5 shadow-xs">
-        <div className="text-xs text-slate-600">
-          Metrics reflect recorded pixel HTTP requests and lifecycle statuses — never inferred human
-          open rates.
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-xs">
+        <div className="text-xs text-slate-500">
+          Pixel activity and delivery status over your selected window.
         </div>
 
         <div className="flex items-center gap-2">
@@ -61,7 +60,7 @@ export function AnalyticsPage() {
             id="analytics-range"
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-900 transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
           >
             {RANGE_OPTIONS.map((opt) => (
               <option key={opt.days} value={opt.days}>

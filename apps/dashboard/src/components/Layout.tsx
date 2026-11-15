@@ -112,9 +112,11 @@ export function Layout({
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <div className="flex min-h-screen bg-slate-50/80 text-slate-900">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 shrink-0 lg:block">{sidebarContent}</aside>
+      <aside className="hidden w-64 shrink-0 lg:sticky lg:top-0 lg:block lg:h-screen">
+        {sidebarContent}
+      </aside>
 
       {/* Mobile Drawer */}
       {mobileMenuOpen ? (
