@@ -4,7 +4,11 @@ import { EmptyState } from '../components/EmptyState.js';
 import { ErrorState } from '../components/ErrorState.js';
 import { IconArrowLeft } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
-import { ClassificationBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
+import {
+  ClassificationBadge,
+  OpenStatusBadge,
+  TrackingStatusBadge,
+} from '../components/StatusBadge.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -136,7 +140,13 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
                   Recipient: <span className="font-medium">{detail.recipientReference}</span>
                 </p>
               </div>
-              <TrackingStatusBadge status={detail.status} />
+              <div className="flex flex-wrap items-center gap-2">
+                <OpenStatusBadge
+                  firstRecordedAt={detail.firstRecordedAt}
+                  eventCount={detail.events.length}
+                />
+                <TrackingStatusBadge status={detail.status} />
+              </div>
             </div>
 
             <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-100 pt-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -177,9 +187,9 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-              <h3 className="text-sm font-semibold text-slate-900">Campaign Assignment</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Campaign</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Group this email into an outreach campaign for combined analytics and exports.
+                Assign this email to a campaign to group analytics and CSV exports.
               </p>
               <div className="mt-3">
                 <label htmlFor="email-campaign-select" className="sr-only">
@@ -211,9 +221,9 @@ export function EmailDetailPage({ emailId, onBack, onNotify }: EmailDetailPagePr
               onSubmit={(e) => void handleCreateReminder(e)}
               className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs"
             >
-              <h3 className="text-sm font-semibold text-slate-900">Schedule Follow-up Reminder</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Follow-up Reminder</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                Set a UTC-normalized due date to follow up on this tracked email.
+                Schedule a reminder if you do not hear back.
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div>

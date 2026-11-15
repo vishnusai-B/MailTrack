@@ -430,6 +430,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
     await flush();
 
     expect(container.textContent).toContain('partner@acme.com');
+    expect(container.textContent).toContain('Opened');
     expect(container.textContent).toContain('Showing page 1 of 2');
 
     // Click Next page
@@ -465,6 +466,7 @@ describe('MailTrack Dashboard UI (Mocked API)', () => {
 
     const detailText = container.textContent ?? '';
     expect(detailText).toContain('Q4 Partnership Deck');
+    expect(detailText).toContain('Opened');
     expect(detailText).toContain('RECORDED');
     expect(detailText).toContain('LIKELY_PROXY');
     expect(detailText).toContain('SUSPECTED_SCANNER');

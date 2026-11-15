@@ -52,19 +52,19 @@ export function Layout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const sidebarContent = (
-    <div className="flex h-full flex-col bg-slate-900 text-slate-200">
-      <div className="flex h-16 items-center justify-between border-b border-slate-800 px-5">
+    <div className="flex h-full flex-col bg-zinc-950 text-zinc-300">
+      <div className="flex h-16 items-center justify-between border-b border-zinc-800/80 px-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-xs ring-1 ring-white/10">
             <IconMail className="h-4 w-4" />
           </div>
-          <span className="text-base font-bold tracking-tight text-white">MailTrack</span>
+          <span className="text-base font-semibold tracking-tight text-white">MailTrack</span>
         </div>
         <button
           type="button"
           onClick={() => setMobileMenuOpen(false)}
           aria-label="Close navigation menu"
-          className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+          className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white lg:hidden"
         >
           <IconX className="h-5 w-5" />
         </button>
@@ -83,26 +83,26 @@ export function Layout({
                 setMobileMenuOpen(false);
               }}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  ? 'bg-zinc-800/90 text-white ring-1 ring-zinc-700/80'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100'
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
               <span>{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-800 p-4 text-xs text-slate-400">
-        <div className="truncate font-medium text-slate-200">{user.name || user.email}</div>
-        <div className="truncate text-slate-400">{user.email}</div>
+      <div className="border-t border-zinc-800/80 p-4 text-xs text-zinc-400">
+        <div className="truncate font-medium text-zinc-100">{user.name || user.email}</div>
+        <div className="truncate text-zinc-500">{user.email}</div>
         <button
           type="button"
           onClick={onLogout}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-800 hover:text-white"
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white"
         >
           <IconLogOut className="h-3.5 w-3.5" />
           Sign out
@@ -120,7 +120,7 @@ export function Layout({
       {mobileMenuOpen ? (
         <div className="fixed inset-0 z-40 flex lg:hidden">
           <div
-            className="fixed inset-0 bg-slate-900/60"
+            className="fixed inset-0 bg-zinc-950/60 backdrop-blur-xs"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
@@ -129,7 +129,7 @@ export function Layout({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
               type="button"

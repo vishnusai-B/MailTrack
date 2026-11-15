@@ -95,37 +95,46 @@ function PopupApp() {
   return (
     <div className="card">
       <div className="header">
-        <span className="brand">MailTrack</span>
-        <span className="badge">{prefs?.authenticated ? 'Signed In' : 'Sign In Required'}</span>
+        <div className="brand-wrap">
+          <span className="brand-icon" aria-hidden="true">
+            M
+          </span>
+          <span className="brand">MailTrack</span>
+        </div>
+        <span className={`badge ${prefs?.authenticated ? '' : 'badge-muted'}`}>
+          {prefs?.authenticated ? 'Connected' : 'Signed out'}
+        </span>
       </div>
 
       {error && <div className="error">{error}</div>}
 
       {!prefs ? (
-        <p className="muted">Connecting to service worker...</p>
+        <p className="muted">Connecting to extension...</p>
       ) : prefs.authenticated ? (
         <>
-          <div className="muted" style={{ marginBottom: 8 }}>
-            Account: <strong>{prefs.userEmail}</strong>
+          <div className="account-pill">
+            Signed in as <strong>{prefs.userEmail}</strong>
           </div>
 
           <div className="row">
             <div>
-              <div className="row-title">Default for new drafts</div>
-              <div className="muted">Does not change already-open Gmail drafts.</div>
+              <div className="row-title">Auto-track new drafts</div>
+              <div className="muted">Only applies to newly opened drafts.</div>
             </div>
-            <input
-              type="checkbox"
-              aria-label="Enable tracking by default for new drafts"
-              checked={prefs.defaultTrackingEnabled}
-              disabled={busy}
-              onChange={() => void handleToggleDefault()}
-            />
+            <label className="switch">
+              <input
+                type="checkbox"
+                aria-label="Enable tracking by default for new drafts"
+                checked={prefs.defaultTrackingEnabled}
+                disabled={busy}
+                onChange={() => void handleToggleDefault()}
+              />
+              <span className="slider" aria-hidden="true" />
+            </label>
           </div>
 
-          <p className="muted" style={{ marginBottom: 10 }}>
-            Use the <strong>Track: ON / OFF</strong> pill in any Gmail compose window to control
-            tracking per email.
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Toggle <strong>Track: ON / OFF</strong> in Gmail Compose to track individual emails.
           </p>
 
           <button
@@ -139,6 +148,32 @@ function PopupApp() {
         </>
       ) : (
         <form onSubmit={(e) => void handleAuth(e)}>
+          <div className="tabs" role="tablist" aria-label="Authentication mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'login'}
+              className={`tab-btn ${mode === 'login' ? 'active' : ''}`}
+              onClick={() => {
+                setError(null);
+                setMode('login');
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'register'}
+              className={`tab-btn ${mode === 'register' ? 'active' : ''}`}
+              onClick={() => {
+                setError(null);
+                setMode('register');
+              }}
+            >
+              Create account
+            </button>
+          </div>
           {mode === 'register' && (
             <div className="field">
               <label>Name (optional)</label>
@@ -168,16 +203,6 @@ function PopupApp() {
           </div>
           <button type="submit" className="btn btn-primary" disabled={busy}>
             {busy ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-link"
-            onClick={() => {
-              setError(null);
-              setMode(mode === 'login' ? 'register' : 'login');
-            }}
-          >
-            {mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
           </button>
         </form>
       )}

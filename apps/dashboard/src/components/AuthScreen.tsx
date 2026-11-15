@@ -40,23 +40,23 @@ export function AuthScreen({ onAuthenticated, sessionMessage }: AuthScreenProps)
   }
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col justify-center bg-slate-50 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px] px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-md">
         <div className="flex items-center justify-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
-            <IconMail className="h-5 w-5" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-sm ring-1 ring-zinc-800">
+            <IconMail className="h-5 w-5 text-blue-400" />
           </div>
           <span className="text-2xl font-bold tracking-tight text-slate-900">MailTrack</span>
         </div>
 
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mt-7 rounded-2xl border border-slate-200/90 bg-white p-8 shadow-sm">
           <h1 className="text-lg font-semibold text-slate-900">
             {mode === 'login' ? 'Sign in to your dashboard' : 'Create a MailTrack account'}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             {mode === 'login'
-              ? 'View tracked emails, pixel request classifications, and analytics.'
-              : 'Register an account to connect your MailTrack Chrome extension.'}
+              ? 'Track email opens, delivery status, and follow-ups.'
+              : 'Connect your Gmail Chrome extension in under a minute.'}
           </p>
 
           {sessionMessage ? (

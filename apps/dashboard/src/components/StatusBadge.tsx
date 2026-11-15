@@ -69,6 +69,37 @@ export function TrackingStatusBadge({ status }: { status: TrackingStatus }) {
   );
 }
 
+export function OpenStatusBadge({
+  firstRecordedAt,
+  eventCount = 0,
+}: {
+  firstRecordedAt: string | null | undefined;
+  eventCount?: number;
+}) {
+  const isOpened = Boolean(firstRecordedAt) || eventCount > 0;
+  if (isOpened) {
+    return (
+      <span
+        title="At least one tracking pixel request has been recorded for this email."
+        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/20 ring-inset"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+        Opened{eventCount > 1 ? ` · ${eventCount}` : ''}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      title="No tracking pixel requests recorded yet."
+      className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-500/15 ring-inset"
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" aria-hidden="true" />
+      Not opened
+    </span>
+  );
+}
+
 export function ClassificationBadge({ classification }: { classification: EventClassification }) {
   const style = CLASSIFICATION_STYLES[classification];
   return (

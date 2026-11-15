@@ -9,7 +9,7 @@ import {
   IconSearch,
 } from '../components/Icons.js';
 import { TableSkeleton } from '../components/Skeleton.js';
-import { TrackingStatusBadge } from '../components/StatusBadge.js';
+import { OpenStatusBadge, TrackingStatusBadge } from '../components/StatusBadge.js';
 import { ApiError, apiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/format.js';
 
@@ -31,6 +31,7 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [status, setStatus] = useState<TrackingStatus | ''>('');
+  const [openFilter, setOpenFilter] = useState<'all' | 'opened' | 'unopened'>('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -89,6 +90,7 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
     setSearchInput('');
     setAppliedSearch('');
     setStatus('');
+    setOpenFilter('all');
     setFromDate('');
     setToDate('');
     setPage(1);
@@ -192,7 +194,30 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
             />
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'opened', label: 'Opened' },
+                { id: 'unopened', label: 'Not opened' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setOpenFilter(opt.id)}
+                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                  openFilter === opt.id
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={() => void handleExportCsv()}
@@ -246,6 +271,9 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                     Subject
                   </th>
                   <th scope="col" className="px-5 py-3.5">
+                    Open Status
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
                     Tracking Status
                   </th>
                   <th scope="col" className="px-5 py-3.5">
@@ -260,37 +288,52 @@ export function TrackedEmailsPage({ onSelectEmail, onNotify }: TrackedEmailsPage
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {data.items.map((email) => {
-                  const lastActivity = email.lastRecordedAt ?? email.firstRecordedAt;
-                  return (
-                    <tr key={email.id} className="transition hover:bg-slate-50/80">
-                      <td className="max-w-[220px] truncate px-5 py-3.5 font-medium text-slate-900">
-                        {email.recipientReference}
-                      </td>
-                      <td className="max-w-[260px] truncate px-5 py-3.5 text-slate-600">
-                        {email.subject || <span className="text-slate-400 italic">No subject</span>}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <TrackingStatusBadge status={email.status} />
-                      </td>
-                      <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
-                        {formatDateTime(email.createdAt)}
-                      </td>
-                      <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
-                        {lastActivity ? formatDateTime(lastActivity) : '—'}
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => onSelectEmail(email.id)}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                        >
-                          View details
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {data.items
+                  .filter((email) => {
+                    const isOpened = Boolean(email.firstRecordedAt) || (email.eventCount ?? 0) > 0;
+                    if (openFilter === 'opened') return isOpened;
+                    if (openFilter === 'unopened') return !isOpened;
+                    return true;
+                  })
+                  .map((email) => {
+                    const lastActivity = email.lastRecordedAt ?? email.firstRecordedAt;
+                    return (
+                      <tr key={email.id} className="transition hover:bg-slate-50/80">
+                        <td className="max-w-[220px] truncate px-5 py-3.5 font-medium text-slate-900">
+                          {email.recipientReference}
+                        </td>
+                        <td className="max-w-[260px] truncate px-5 py-3.5 text-slate-600">
+                          {email.subject || (
+                            <span className="text-slate-400 italic">No subject</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <OpenStatusBadge
+                            firstRecordedAt={email.firstRecordedAt}
+                            eventCount={email.eventCount}
+                          />
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <TrackingStatusBadge status={email.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
+                          {formatDateTime(email.createdAt)}
+                        </td>
+                        <td className="px-5 py-3.5 text-xs whitespace-nowrap text-slate-500">
+                          {lastActivity ? formatDateTime(lastActivity) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => onSelectEmail(email.id)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            View details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
