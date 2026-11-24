@@ -40,7 +40,7 @@ Defined in `apps/server/prisma/schema.prisma`:
 Pixel requests are classified conservatively in `apps/server/src/modules/tracking/classifier.ts`:
 
 - **`LIKELY_PROXY`**: Matches `GoogleImageProxy` (Gmail), Apple Mail Privacy Protection (`CFNetwork` / `Mail/`), or Outlook image proxy User-Agents.
-- **`SUSPECTED_SCANNER`**: Matches known security scanners/bots (Barracuda, Mimecast, Proofpoint, Defender, SafeLinks, crawlers) or arrives within 5 seconds of `sentAt`.
+- **`SUSPECTED_SCANNER`**: Matches known security scanners/bots (Barracuda, Mimecast, Proofpoint, Defender, SafeLinks, crawlers) or arrives within 2 seconds of `sentAt`.
 - **`RECORDED`**: Standard pixel request without proxy/scanner signatures.
 
 **Important:** None of these classifications establish confirmed human identity or guaranteed reading. Image-blocking clients generate zero events, while pre-fetching proxies (e.g., Apple MPP) generate events without human interaction.

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Shared must be built before typecheck/test: its package.json points
+      # main/types at ./dist/*, which does not exist on a clean clone (P1-3).
+      - run: npm run build --workspace=@mailtrack/shared
+      # Server typecheck/build need a generated Prisma client (P1-3 follow-on).
+      - run: npm run prisma:generate --workspace=@mailtrack/server
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      # Default test run must stay green without a generated client / live DB;
+      # the integration suite is excluded from the default vitest include and
+      # runs only via `test:integration` with a dedicated test DB (P1-2).
+      - run: npm test
+      - run: npm run build

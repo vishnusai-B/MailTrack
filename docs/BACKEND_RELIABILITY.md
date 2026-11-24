@@ -50,7 +50,7 @@ Out-of-order and backward transitions (e.g., `SENT -> FAILED`, `FAILED -> DISPAT
    ```
 2. **Required Environment Variables (`.env`):**
    - `DATABASE_URL`, `TEST_DATABASE_URL` (dedicated test database, e.g. `mailtrack_test`)
-   - `JWT_ACCESS_SECRET` (minimum 16 chars, 32+ random chars recommended)
+   - `JWT_ACCESS_SECRET` (minimum 32 chars in production)
    - `TRACKING_DOMAIN`, `PENDING_TTL_HOURS=24`, `DISPATCHED_TTL_HOURS=168`
 3. **Migrate Dedicated Test Database:**
    ```bash
